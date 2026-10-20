@@ -1,0 +1,489 @@
+/*
+ * D17 窗口背景：透明由原生 vibrancy（NSVisualEffectView / HudWindow 材质）提供，
+ * 禁用 CSS 毛玻璃模糊；内容层一律实色（never glass）。
+ */
+
+html,
+body {
+  background: transparent;
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+}
+
+#root {
+  height: 100%;
+}
+
+.app-shell {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  /* 冒烟三轮（Liquid Glass）：圆角与 NSGlassEffectView radius 20pt 对齐——
+   * glass 的 light rim 要顺着圆角露出，两者不一致会出现玻璃边缘和内容边缘错位 */
+  border-radius: 20px;
+  /*
+   * 冒烟修复一轮（浅色模式洗白）：内容画布实色压阵——D17 分层 =
+   * 窗口层透（html/body transparent 不动，原生材质从这透出）
+   *          + 内容层实（这里深底）。
+   * 二轮调参（B4 玻璃质感）：0.88 → 0.78，vibrancy 透出更明显（22% 氛围）。
+   * 三轮调参：0.78 → 0.80，对齐 Atd fill token（80% rgb(24,24,24)）。
+   * 对比度自查：#f4f4f5 on 80%#18181b+20%材质（最亮混合≈#464646）≈ 8.2:1，
+   * #d4d4d8 ≈ 5.9:1，均远超 WCAG 4.5:1；.38 元信息灰为 v8 规格的去强调值。
+   */
+  background: rgba(24, 24, 27, 0.80);
+}
+
+/* decorations:false 下的自绘拖拽区 */
+.app-drag {
+  height: 40px;
+  flex: none;
+}
+
+.app-panel {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 24px 24px;
+}
+
+/* 内容层实色（never glass，不做模糊叠加） */
+.app-hint {
+  margin: 0;
+  text-align: center;
+  font: 13px/1.6 -apple-system, "SF Pro Text", "PingFang SC", sans-serif;
+  color: #e4e4e7;
+  background: rgba(24, 24, 27, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  padding: 12px 16px;
+}
+
+/* ===== T8：Markdown 渲染样式（追加块，既有部分零改动） ===== */
+
+.md-root {
+  min-width: 0;
+}
+
+.md-p {
+  margin: 0 0 8px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.md-ul,
+.md-ol {
+  margin: 0 0 8px;
+  padding-left: 20px;
+}
+
+.md-li {
+  font-size: 13px;
+  line-height: 1.75;
+  color: #d4d4d8;
+}
+
+/* D16 引用式代码块：左侧 2px 淡竖线 + 等宽 + 无底色无圆角（不是深色卡片） */
+.code-block-reference {
+  border-left: 2px solid rgba(255, 255, 255, 0.16);
+  padding-left: 11px;
+  margin: 0 0 8px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.6;
+  color: #d4d4d8;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  overflow-x: auto;
+}
+
+/* 行内代码 chip：淡底圆角等宽 */
+.inline-code-chip {
+  background: rgba(255, 255, 255, 0.07);
+  border-radius: 4px;
+  padding: 1px 5px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.92em;
+  color: #e4e4e7;
+}
+
+/* ===== T9：四类信息分区（D16 规格写死） ===== */
+
+.message-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+}
+
+.message-item {
+  flex: none;
+}
+
+/* 1. 用户消息：右对齐气泡 */
+.user-bubble {
+  align-self: flex-end;
+  max-width: 82%;
+  background: rgba(255, 255, 255, 0.07);
+  border-radius: 14px 14px 4px 14px;
+  padding: 9px 13px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: #f4f4f5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* 2. agent 答案：左对齐，Markdown 由 T8 renderMarkdown 渲染 */
+.assistant-block {
+  align-self: flex-start;
+  max-width: 100%;
+  min-width: 0;
+  font-size: 13px;
+  line-height: 1.75;
+  color: #d4d4d8;
+}
+
+/* 3. 系统提示：居中淡色 */
+.system-hint {
+  align-self: center;
+  text-align: center;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.3);
+  padding: 4px 0;
+}
+
+/* 4. 流式光标：生成中答案末尾闪烁（2px 宽 12px 高 #4ade80） */
+.stream-cursor {
+  display: inline-block;
+  width: 2px;
+  height: 12px;
+  margin-left: 2px;
+  vertical-align: text-bottom;
+  background: #4ade80;
+  animation: blink 1s step-end infinite;
+}
+
+@keyframes blink {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0;
+  }
+}
+
+/* ===== T10：工具行 + 展开参数卡片 ===== */
+
+.tool-row-wrap {
+  align-self: stretch;
+}
+
+.tool-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 3px 0;
+  border: none;
+  background: none;
+  cursor: pointer;
+  text-align: left;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.38); /* 整行三成灰 */
+}
+
+.tool-row:hover {
+  color: rgba(255, 255, 255, 0.55);
+}
+
+/* 完成对勾：淡绿 */
+.tool-check {
+  flex: none;
+  width: 14px;
+  font-size: 11px;
+  color: #4ade80;
+}
+
+/* 运行中：shimmer 流光块（CSS 动画，无 JS 动画库） */
+.tool-shimmer {
+  flex: none;
+  width: 14px;
+  height: 10px;
+  border-radius: 2px;
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0.08) 25%,
+    rgba(255, 255, 255, 0.28) 50%,
+    rgba(255, 255, 255, 0.08) 75%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.2s linear infinite;
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: 100% 0;
+  }
+  100% {
+    background-position: -100% 0;
+  }
+}
+
+.tool-verb {
+  flex: none;
+}
+
+/* 文件 chip：淡底圆角等宽 */
+.file-chip {
+  flex: none;
+  max-width: 40%;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  background: rgba(255, 255, 255, 0.07);
+  border-radius: 4px;
+  padding: 1px 6px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.tool-summary {
+  flex: none;
+  color: rgba(255, 255, 255, 0.3);
+}
+
+.tool-arrow {
+  flex: none;
+  margin-left: auto;
+  font-size: 10px;
+}
+
+/* 展开参数卡片：1px 边框 rgba 白 .08 + 圆角 10 + header 28px */
+.tool-card {
+  margin: 4px 0 6px 20px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  overflow: hidden;
+  background: rgba(24, 24, 27, 0.92);
+}
+
+.tool-card__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 28px;
+  padding: 0 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.tool-card__copy {
+  cursor: pointer;
+  padding: 2px 4px;
+  border-radius: 4px;
+}
+
+.tool-card__copy:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.tool-card__body {
+  margin: 0;
+  padding: 8px 10px;
+  max-height: 200px;
+  overflow: auto;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px;
+  line-height: 1.5;
+  color: rgba(255, 255, 255, 0.55);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.tool-card__footer {
+  padding: 6px 10px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.38);
+  max-height: 80px;
+  overflow: auto;
+  white-space: pre-wrap;
+}
+
+/* ===== T13：离线横幅 ===== */
+
+.offline-banner {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 5px 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.5);
+  background: rgba(24, 24, 27, 0.92);
+}
+
+.offline-banner__close {
+  border: none;
+  background: none;
+  color: rgba(255, 255, 255, 0.4);
+  cursor: pointer;
+  font-size: 11px;
+  padding: 2px 4px;
+  border-radius: 4px;
+}
+
+.offline-banner__close:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+/* ===== T11/T14：输入区 + 命令提示浮层 ===== */
+
+.input-bar {
+  flex: none;
+  position: relative;
+  padding: 8px 12px 10px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.input-bar__row {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.input-bar__attach {
+  flex: none;
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-size: 14px;
+  padding: 6px 4px;
+  border-radius: 6px;
+  opacity: 0.5;
+}
+
+.input-bar__attach:hover {
+  opacity: 0.9;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.input-bar__textarea {
+  flex: 1;
+  min-width: 0;
+  resize: none;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+  background: rgba(24, 24, 27, 0.92);
+  color: #f4f4f5;
+  padding: 8px 10px;
+  font: 13px/1.5 -apple-system, "SF Pro Text", "PingFang SC", sans-serif;
+  outline: none;
+  overflow-y: auto;
+}
+
+.input-bar__textarea:focus {
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.input-bar__send,
+.input-bar__stop {
+  flex: none;
+  width: 30px;
+  height: 30px;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.input-bar__send {
+  background: rgba(255, 255, 255, 0.1);
+  color: #f4f4f5;
+}
+
+.input-bar__send:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.input-bar__send:not(:disabled):hover {
+  background: rgba(255, 255, 255, 0.18);
+}
+
+.input-bar__stop {
+  background: rgba(74, 222, 128, 0.16);
+  color: #4ade80;
+}
+
+.input-bar__stop:hover {
+  background: rgba(74, 222, 128, 0.28);
+}
+
+.input-bar__hint {
+  display: flex;
+  gap: 6px;
+  margin-top: 4px;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.3);
+}
+
+/* T11：命令提示浮层（输入框上方） */
+.cmd-palette {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: calc(100% - 4px);
+  max-height: 240px;
+  overflow-y: auto;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  background: rgba(24, 24, 27, 0.96);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  z-index: 10;
+}
+
+.cmd-palette__item {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  width: 100%;
+  padding: 7px 10px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  text-align: left;
+}
+
+.cmd-palette__item--active {
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.cmd-palette__name {
+  flex: none;
+  font: 500 12px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: #e4e4e7;
+}
+
+.cmd-palette__desc {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font: 11px/1.4 -apple-system, "SF Pro Text", "PingFang SC", sans-serif;
+  color: rgba(255, 255, 255, 0.38);
+}
