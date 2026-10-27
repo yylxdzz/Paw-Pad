@@ -37,3 +37,10 @@ Thumbs.db
 # Test artifacts
 .cache/
 .pnpm-store/
+
+# Session-local task notes
+ORB_NATIVE_DRAG_TODO.md
+
+
+# 项目包管理器为 pnpm；package-lock.json 为 npx 副产物
+package-lock.json
