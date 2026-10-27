@@ -19,13 +19,17 @@
  * - 浮球审批态联动（8.4）：新 pending → 黄 #fcd34d；全部 resolved → 清除（Orb 侧 orb-state.approval）
  */
 
+import { listen } from "@tauri-apps/api/event";
 import { fetch as tauriFetch } from "@tauri-apps/plugin-http";
 
 import { resolveAgentId } from "./api";
 import { getApiBase } from "./connection";
 import { APPROVAL_TIMEOUT_MS } from "./orb-state";
 
-/** 5s 定时轮询间隔（8.2 硬约束） */
+/**
+ * 5s 轮询间隔：由 Rust tick.rs 的 TICK_INTERVAL_MS 驱动（5s），
+ * 此前端常量仅作文档参考（不再有任何 setInterval 消费它）。
+ */
 export const APPROVAL_POLL_INTERVAL_MS = 5000;
 
 /** App 侧消费的 pending 审批（字段已按 push-messages 实测归一化） */
@@ -199,7 +203,8 @@ export interface ApprovalPollCallbacks {
   onResolved?: (approval: PendingApproval, pendingCount: number) => void;
 }
 
-let pollTimer: ReturnType<typeof setInterval> | null = null;
+/** Rust 全局 tick 的 unsubscribe 句柄（stop 时调用） */
+let tickOff: Promise<() => void> | null = null;
 let inFlight = false;
 const knownApprovals = new Map<string, PendingApproval>();
 let callbacks: ApprovalPollCallbacks = {};
@@ -240,22 +245,26 @@ export function getKnownApprovals(): PendingApproval[] {
 }
 
 /**
- * 启动 5s 定时轮询（幂等：已在跑则仅更新回调）。
- * 返回停止函数（显式退出条件，杜绝无限循环）。
+ * 启动审批轮询：驱动源 = Rust 全局 "poll-tick" 事件（5s）。
+ * 2026-10-27：计时源从本文件 setInterval 换成 Rust tick——macOS WKWebView 对
+ * 不可见页面节流定时器，主窗 ❌ 藏起后 setInterval 停滞（实证 resolved 检测
+ * 从 6s 劣化到 5 分钟）；Rust loop 不受页面可见性影响。幂等：已在跑则仅更新回调。
  */
 export function startApprovalPoll(cbs: ApprovalPollCallbacks = {}): () => void {
   callbacks = cbs;
-  if (!pollTimer) {
+  if (!tickOff) {
     void refreshApprovals(); // 启动即补拉一次，兜住轮询开启前已存在的 pending
-    pollTimer = setInterval(() => void refreshApprovals(), APPROVAL_POLL_INTERVAL_MS);
+    tickOff = listen("poll-tick", () => {
+      void refreshApprovals();
+    });
   }
   return stopApprovalPoll;
 }
 
-/** 停止轮询（清理 setInterval） */
+/** 停止轮询（退订 tick） */
 export function stopApprovalPoll(): void {
-  if (pollTimer) {
-    clearInterval(pollTimer);
-    pollTimer = null;
+  if (tickOff) {
+    void tickOff.then((f) => f());
+    tickOff = null;
   }
 }

@@ -81,7 +81,7 @@ const MENU_ITEMS: Array<{
   {
     id: "hide",
     label: "隐藏",
-    action: "隐藏主窗",
+    action: "隐藏浮球（Dock 恢复）",
     icon: (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
         <path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z" />
@@ -609,7 +609,9 @@ export default function Orb() {
           await playSummonRelay();
           break;
         case "hide":
-          await invoke("orb_hide_main");
+          // D36（2026-10-27 修订）：隐藏=隐藏浮球自身（从桌面消失），
+          // 点 Dock 栏 App 图标恢复（Rust RunEvent::Reopen → show 浮球）
+          await invoke("orb_hide_orb");
           break;
         case "exit":
           await invoke("orb_exit_app");

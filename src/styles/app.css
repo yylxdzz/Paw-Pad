@@ -481,6 +481,44 @@ body {
   font-size: 10px;
 }
 
+/* D8（2026-10-27 修订）：工具组头——视觉语言对齐 .tool-row
+   （容器 align-self/padding/gap/font-size/hover 均照抄 .tool-row 实际值） */
+.tool-group-wrap {
+  align-self: stretch;
+}
+
+.tool-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 3px 0;
+  border: none;
+  background: none;
+  cursor: pointer;
+  text-align: left;
+  font-size: 12px;
+  color: var(--text-faded);
+}
+
+.tool-group:hover {
+  color: var(--text-muted);
+}
+
+.tool-group__label {
+  flex: none;
+}
+
+.tool-group__running {
+  flex: none;
+  opacity: 0.75;
+}
+
+.tool-group__detail {
+  display: flex;
+  flex-direction: column;
+}
+
 /* 展开参数卡片：1px 边框 rgba 白 .08 + 圆角 10 + header 28px */
 .tool-card {
   margin: 4px 0 6px 20px;

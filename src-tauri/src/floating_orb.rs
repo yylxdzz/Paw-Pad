@@ -463,6 +463,15 @@ pub fn orb_hide_main(app: tauri::AppHandle) {
     }
 }
 
+/// D36（2026-10-27 修订）：弧形菜单「隐藏」= 隐藏浮球窗口自身。
+/// 恢复路径 = 用户点 Dock 栏 App 图标 → RunEvent::Reopen（lib.rs）→ show 浮球。
+#[tauri::command]
+pub fn orb_hide_orb(app: tauri::AppHandle) {
+    if let Some(orb) = app.get_webview_window("floating_orb") {
+        let _ = orb.hide();
+    }
+}
+
 /// 浮球「退出」菜单项：整应用退出。
 #[tauri::command]
 pub fn orb_exit_app(app: tauri::AppHandle) {

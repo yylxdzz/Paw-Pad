@@ -13,6 +13,7 @@
  * 以免与 api.ts（反向 import getApiBase）形成循环依赖。
  */
 
+import { listen } from "@tauri-apps/api/event";
 import { fetch as tauriFetch } from "@tauri-apps/plugin-http";
 // 模块 6（6.3）：连接事件记日志（在线/离线翻转，无内容）
 import { logInfo } from "./logger";
@@ -28,7 +29,7 @@ export const SCAN_PORTS = [8088, 3000, 8000, 5000] as const;
 
 /** 单点探测超时 */
 const PROBE_TIMEOUT_MS = 3000;
-/** 自动重连间隔（5s） */
+/** 自动重连间隔（5s）：驱动源已换 Rust tick.rs 的 TICK_INTERVAL_MS，此值仅文档参考 */
 export const RECONNECT_INTERVAL_MS = 5000;
 
 const API_BASE_KEY = "pawpad_api_base";
@@ -207,11 +208,15 @@ export async function retryConnection(): Promise<void> {
 
 let reconnectStop: (() => void) | null = null;
 let loopBusy = false;
+/** Rust 全局 tick 的 unsubscribe 句柄 */
+let reconnectTickOff: Promise<() => void> | null = null;
 
 /**
- * 5.4 自动重连循环：每 5s（setInterval）一次——
+ * 5.4 自动重连：驱动源 = Rust 全局 "poll-tick" 事件（5s）——
  * - 在线：健康检查当前 base
  * - 掉线：重新 discoverBase（端口可能变了），找到可连地址即恢复
+ * 2026-10-27：计时源从 setInterval 换成 Rust tick（macOS WKWebView 对不可见
+ * 页面节流定时器，主窗 ❌ 藏起后重连停滞；Rust loop 不受影响）。
  * busy 守卫防重叠 tick；stop 后不再跑（显式退出条件，杜绝无限循环）。
  */
 function startReconnectLoop(): () => void {
@@ -233,10 +238,15 @@ function startReconnectLoop(): () => void {
       loopBusy = false;
     }
   };
-  const timer = setInterval(tick, RECONNECT_INTERVAL_MS);
+  reconnectTickOff = listen("poll-tick", () => {
+    void tick();
+  });
   return () => {
     stopped = true;
-    clearInterval(timer);
+    if (reconnectTickOff) {
+      void reconnectTickOff.then((f) => f());
+      reconnectTickOff = null;
+    }
   };
 }
 

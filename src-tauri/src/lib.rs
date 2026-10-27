@@ -2,6 +2,7 @@ mod file_search;
 mod floating_orb;
 mod logger;
 mod screenshot;
+mod tick;
 mod window;
 
 use tauri::Manager;
@@ -23,10 +24,12 @@ pub fn run() {
         .plugin(tauri_plugin_wdio_webdriver::init())
         .plugin(tauri_plugin_wdio::init());
 
-    builder
+    let app = builder
         .setup(|app| {
             // 模块 6（6.3）：日志系统初始化（建目录 + 7 天清理 + panic hook）
             logger::init();
+            // 全局 5s tick（Rust 侧 loop，不受 WebView 隐藏节流——审批轮询/连接重连的计时源）
+            tick::start(app.handle());
             window::setup(app)?;
             // 模块 1（1.1）：桌面常驻浮球窗口，在主窗口配置就绪后创建。
             floating_orb::create_orb_window(app.handle())?;
@@ -55,6 +58,8 @@ pub fn run() {
             floating_orb::orb_pin_state,
             floating_orb::orb_new_session,
             floating_orb::orb_hide_main,
+            // D36（2026-10-27 修订）：弧形菜单「隐藏」= 隐藏浮球自身
+            floating_orb::orb_hide_orb,
             floating_orb::orb_exit_app,
             floating_orb::read_dropped_files,
             floating_orb::summon_main_window,
@@ -69,6 +74,21 @@ pub fn run() {
             logger::log_frontend,
             logger::export_logs,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application");
+
+    // D36（2026-10-27 修订）：Dock 栏 App 图标点击（macOS RunEvent::Reopen，
+    // 无可见窗口时点 Dock 图标触发）→ 恢复浮球显示。「隐藏」菜单项藏掉浮球后，
+    // 用户点 Dock 图标即在此恢复。
+    let app_for_run = app;
+    app_for_run.run(|handle, event| {
+        // tauri 2.12.4 的 RunEvent::Reopen 是带 has_visible_windows 字段的结构体
+        // 变体且 #[non_exhaustive]，模式必须写 { .. }（app.rs:279）。
+        if let tauri::RunEvent::Reopen { .. } = event {
+            if let Some(orb) = handle.get_webview_window("floating_orb") {
+                let _ = orb.show();
+                let _ = orb.set_focus();
+            }
+        }
+    });
 }

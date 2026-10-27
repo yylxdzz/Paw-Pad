@@ -17,6 +17,8 @@ import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useSta
 import AssistantBlock from "./AssistantBlock";
 import ApprovalCard from "./ApprovalCard";
 import ToolRow from "./ToolRow";
+import ToolGroup from "./ToolGroup";
+import { groupConsecutiveTools } from "../lib/tool-group";
 import UserBubble from "./UserBubble";
 import { loadHistory, type DisplayMessage } from "../lib/history";
 import { getCurrentSessionId } from "../lib/session";
@@ -310,11 +312,21 @@ const MessageList = forwardRef<MessageListHandle, MessageListProps>(
 
     return (
       <div className="message-list" ref={scrollRef} onScroll={handleScroll}>
-        {messages.map((m) => (
-          <div key={m.id} className={`message-item message-item--${m.kind}`}>
-            {renderItem(m)}
-          </div>
-        ))}
+        {/* D8（2026-10-27 修订）：连续工具调用合并为组摘要行——先分组再渲染 */}
+        {groupConsecutiveTools(messages).map((item) =>
+          item.kind === "toolGroup" ? (
+            <div key={item.key} className="message-item message-item--tool">
+              <ToolGroup tools={item.tools} />
+            </div>
+          ) : item.message.kind === "tool" ? null : (
+            <div
+              key={item.message.id}
+              className={`message-item message-item--${item.message.kind}`}
+            >
+              {renderItem(item.message)}
+            </div>
+          ),
+        )}
       </div>
     );
   },
