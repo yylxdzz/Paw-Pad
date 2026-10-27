@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
 import { listAgents, type Agent } from "../lib/api";
 import { getCurrentAgentId, setCurrentAgentId } from "../lib/session";
+import StatusLight from "./StatusLight";
+// 模块 6（6.1）：顶栏最右角落面板（⋯ 入口 + 更新红点角标 + 5 项子菜单）
+import CornerPanel from "./CornerPanel";
 import "./TopBar.css";
 
 interface TopBarProps {
@@ -16,8 +19,13 @@ interface TopBarProps {
  * - 选中后存 localStorage.current_agent_id，顶栏以下拉形式随时切换
  * - B1：下拉态右侧「＋ 新建」按钮（plan T5 成功条件 4 的 UI 入口；⌘N 在 App 层）
  * - N5：离线提示职责归 OfflineBanner（5s 轮询可关闭），TopBar 不再自带一次性快照
+ * - 设计决议：顶栏只有 状态灯 + agent 下拉 + ＋ 新建 + ⋯（无 x 缩回按钮；
+ *   缩回浮球走 Esc / 浮球单击 / ⌘⇧Space，见 App.tsx recallMain）
  */
-export default function TopBar({ onAgentChange, onNewSession }: TopBarProps) {
+export default function TopBar({
+  onAgentChange,
+  onNewSession,
+}: TopBarProps) {
   const [agents, setAgents] = useState<Agent[]>([]);
   const [currentId, setCurrentId] = useState<string | null>(() => getCurrentAgentId());
   const [loading, setLoading] = useState(true);
@@ -79,6 +87,7 @@ export default function TopBar({ onAgentChange, onNewSession }: TopBarProps) {
 
   return (
     <header className="topbar">
+      <StatusLight />
       <select
         className="topbar__select"
         aria-label="选择 Agent"
@@ -103,6 +112,8 @@ export default function TopBar({ onAgentChange, onNewSession }: TopBarProps) {
           ＋ 新建
         </button>
       )}
+      {/* 模块 6（6.1）：角落面板入口（⋯ + 新版本红点角标） */}
+      <CornerPanel />
     </header>
   );
 }

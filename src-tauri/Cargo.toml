@@ -20,9 +20,19 @@ tauri-build = { version = "2", features = [] }
 [dependencies]
 tauri = { version = "2", features = ["macos-private-api"] }
 tauri-plugin-opener = "2"
-window-vibrancy = "0.8.1"
+tauri-plugin-fs = "2"
+# 方案 A（2026-10-24）：window-vibrancy（apply_vibrancy / apply_liquid_glass）已弃用
+# ——原生材质的 backdrop 是窗口服务器侧表面，hide 后不回收 = 桌面浅灰残留，且做不了
+# 浅色模式。主窗口毛玻璃改由 CSS backdrop-filter 提供（src/styles/app.css .app-shell）。
 tauri-plugin-global-shortcut = "2.4.1"
 tauri-plugin-http = "2.8.3"
+# 模块 2（2.1）：file_search.rs 的 FileEntry derive Serialize 需要 serde 直接依赖
+# （tauri 只传递依赖 serde，本 crate 无法直接 `use serde::`——floating_orb.rs 的
+# serde import 同样依赖本条）
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+# 模块 6（6.3）：logger.rs 的本地时间 / 按日轮转 / 7 天清理
+chrono = "0.4"
 
 
 # Read the optimization guideline for more details: https://tauri.app/concept/size/#cargo-configuration

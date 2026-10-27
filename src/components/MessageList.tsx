@@ -15,10 +15,17 @@
 
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from "react";
 import AssistantBlock from "./AssistantBlock";
+import ApprovalCard from "./ApprovalCard";
 import ToolRow from "./ToolRow";
 import UserBubble from "./UserBubble";
 import { loadHistory, type DisplayMessage } from "../lib/history";
 import { getCurrentSessionId } from "../lib/session";
+import {
+  decideApproval,
+  refreshApprovals,
+  type ApprovalDecision,
+  type PendingApproval,
+} from "../lib/approval-poll";
 
 /** 运行时消息（在 DisplayMessage 基础上增加流式态与工具参数） */
 export type LiveMessage =
@@ -35,7 +42,10 @@ export type LiveMessage =
     }
   // sessionId：系统提示产生时所属 session——loadHistory 整表覆盖时按归属保留
   // 当前 session 的提示（如「＋新建」的「新对话」），不因历史加载被冲掉
-  | { kind: "system"; id: string; text: string; ts: number; sessionId?: string };
+  | { kind: "system"; id: string; text: string; ts: number; sessionId?: string }
+  // 模块 8：审批卡片（消息流内嵌，非模态弹窗）——approval-poll diff 到新 pending 时插入，
+  // resolved（对端决策 / 本地决策 / 300s 超时）时 prune 移除
+  | { kind: "approval"; id: string; approval: PendingApproval };
 
 /** T14 通过 ref 调用的实时消息接口 */
 export interface MessageListHandle {
@@ -49,6 +59,10 @@ export interface MessageListHandle {
   completeToolResult(result: { callId?: string; name?: string; output?: string }): void;
   /** 系统提示（居中淡色，如"新对话"分隔） */
   appendSystemMessage(text: string): void;
+  /** 模块 8：新 pending 审批 → 插入审批卡片（同 id 幂等，不重复插） */
+  insertApproval(approval: PendingApproval): void;
+  /** 模块 8：resolved（对端决策 / 本地决策 / 300s 超时）→ 卡片自动收起（移除） */
+  pruneApproval(id: string): void;
   /** 本轮生成结束：收起生成中光标 */
   finishTurn(): void;
   /** 清空全部消息 */
@@ -110,7 +124,10 @@ const MessageList = forwardRef<MessageListHandle, MessageListProps>(
           const pendingSystems = prev.filter(
             (m) => m.kind === "system" && m.sessionId === loadSessionId,
           );
-          return [...pendingSystems, ...loaded];
+          // 模块 8：审批卡片是跨会话的实时态（后端 pending 全量返回），
+          // 历史整表覆盖不该冲掉仍在等待决策的卡片
+          const pendingCards = prev.filter((m) => m.kind === "approval");
+          return [...pendingSystems, ...pendingCards, ...loaded];
         });
       });
       return () => {
@@ -137,6 +154,26 @@ const MessageList = forwardRef<MessageListHandle, MessageListProps>(
         el.scrollTo({ top: el.scrollHeight });
       }
     }, [messages]);
+
+    // 模块 8：审批决策编排——POST /api/approval/* 后本地 prune + 立即同步轮询
+    // （成功 / 对端已决 409 / 已消失 404 都收起卡片；仅网络失败 status 0 保留等重试）
+    const decideAndPrune = useCallback(
+      async (
+        approval: PendingApproval,
+        decision: ApprovalDecision,
+        scope?: "exact" | "similar",
+      ) => {
+        const result = await decideApproval(approval, decision, { scope });
+        if (result.ok || result.status === 409 || result.status === 404) {
+          setMessages((prev) =>
+            prev.filter((m) => !(m.kind === "approval" && m.id === approval.id)),
+          );
+          void refreshApprovals(); // 立即同步：下一轮 diff 触发浮球审批态清除
+        }
+        return result;
+      },
+      [],
+    );
 
     // 实时消息能力（全部用函数式 setState，方法身份稳定）
     useImperativeHandle(
@@ -221,6 +258,16 @@ const MessageList = forwardRef<MessageListHandle, MessageListProps>(
             },
           ]),
 
+        // 模块 8：新 pending 插卡片（同 id 幂等）；resolved 移除卡片（自动收起）
+        insertApproval: (approval) =>
+          setMessages((prev) => {
+            if (prev.some((m) => m.kind === "approval" && m.id === approval.id)) return prev;
+            return [...prev, { kind: "approval", id: approval.id, approval }];
+          }),
+
+        pruneApproval: (id) =>
+          setMessages((prev) => prev.filter((m) => !(m.kind === "approval" && m.id === id))),
+
         finishTurn: () =>
           setMessages((prev) =>
             prev.map((m) =>
@@ -251,6 +298,13 @@ const MessageList = forwardRef<MessageListHandle, MessageListProps>(
           );
         case "system":
           return <div className="system-hint">{m.text}</div>;
+        case "approval":
+          return (
+            <ApprovalCard
+              approval={m.approval}
+              onDecide={(decision, scope) => decideAndPrune(m.approval, decision, scope)}
+            />
+          );
       }
     }, []);
 

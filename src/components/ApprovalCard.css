@@ -1,0 +1,172 @@
+/* 模块 8（8.1）：审批卡片样式——消息流内的内嵌卡片（非模态弹窗） */
+
+.approval-card {
+  align-self: stretch;
+  max-width: 100%;
+  min-width: 0;
+  margin: 2px 0;
+  border: 1px solid var(--warn-soft); /* 审批黄描边 var(--warn) */
+  border-radius: 10px;
+  background: var(--warn-fill);
+  padding: 10px 12px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text-body);
+}
+
+/* 默认层头部：⚠ + 工具名 + severity 徽标 */
+.approval-card__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.approval-card__icon {
+  flex: none;
+  color: var(--warn);
+  font-size: 13px;
+}
+
+.approval-card__title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.approval-card__severity {
+  flex: none;
+  font-size: 11px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--fill);
+}
+
+/* findings_summary */
+.approval-card__findings {
+  margin-top: 6px;
+  color: var(--text-body);
+  overflow-wrap: anywhere;
+}
+
+/* reasoning（空则不渲染） */
+.approval-card__reasoning {
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--text-dim);
+  overflow-wrap: anywhere;
+}
+
+/* 操作行：批准 / 拒绝 / 展开 / 详情 */
+.approval-card__actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.approval-card__btn {
+  border: 1px solid var(--border-btn);
+  border-radius: 6px;
+  background: var(--fill-weak);
+  padding: 3px 14px;
+  font-size: 12px;
+  cursor: pointer;
+  color: var(--text-primary);
+}
+
+.approval-card__btn:hover:not(:disabled) {
+  background: var(--fill-hover);
+}
+
+.approval-card__btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.approval-card__btn--approve {
+  border-color: var(--ok-soft);
+  color: var(--ok);
+}
+
+.approval-card__btn--deny {
+  border-color: var(--danger-border);
+  color: var(--danger);
+}
+
+.approval-card__expand,
+.approval-card__details {
+  border: none;
+  background: none;
+  padding: 3px 2px;
+  font-size: 11px;
+  color: var(--text-faded);
+  cursor: pointer;
+}
+
+.approval-card__expand:hover,
+.approval-card__details:hover {
+  color: var(--text-hover);
+}
+
+.approval-card__details {
+  margin-left: auto;
+}
+
+.approval-card__error {
+  margin-top: 6px;
+  font-size: 11px;
+  color: var(--danger);
+}
+
+/* 展开层 */
+.approval-card__body {
+  margin-top: 10px;
+  border-top: 1px solid var(--border);
+  padding-top: 8px;
+}
+
+.approval-card__label {
+  font-size: 11px;
+  color: var(--text-faded);
+  margin-bottom: 4px;
+}
+
+.approval-card__params {
+  margin: 0;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: var(--bg-inset);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--text-body);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+/* exact / similar 二选一（is_generalized 时） */
+.approval-card__scope {
+  margin-top: 10px;
+}
+
+.approval-card__scope-option {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 3px 0;
+  font-size: 12px;
+  cursor: pointer;
+  color: var(--text-body);
+}
+
+.approval-card__scope-target {
+  font-size: 11px;
+  color: var(--text-faded);
+  overflow-wrap: anywhere;
+}

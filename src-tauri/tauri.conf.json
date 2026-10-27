@@ -4,7 +4,7 @@
   "version": "0.1.0",
   "identifier": "com.pawpad.app",
   "build": {
-    "beforeDevCommand": "pnpm dev",
+    "beforeDevCommand": "npm run dev",
     "devUrl": "http://localhost:1420",
     "beforeBuildCommand": "pnpm build",
     "frontendDist": "../dist"
@@ -15,12 +15,18 @@
     "windows": [
       {
         "label": "main",
-        "title": "QwenPaw 轻助手",
-        "width": 430,
-        "height": 600,
+        "title": "",
+        "width": 400,
+        "height": 520,
+        "minWidth": 320,
+        "minHeight": 320,
         "resizable": true,
-        "decorations": false,
-        "transparent": true
+        "alwaysOnTop": false,
+        "decorations": true,
+        "titleBarStyle": "Overlay",
+        "transparent": true,
+        "visible": false,
+        "dragDropEnabled": false
       }
     ],
     "security": {

@@ -8,6 +8,17 @@
     "opener:default",
     "global-shortcut:default",
     "wdio:default",
+    "fs:allow-read-file",
+    "fs:allow-stat",
+    {
+      "identifier": "fs:scope",
+      "allow": [
+        { "path": "$TEMP/*" },
+        { "path": "$TEMP/**" },
+        { "path": "$HOME/*" },
+        { "path": "$HOME/**" }
+      ]
+    },
     {
       "identifier": "http:default",
       "allow": [

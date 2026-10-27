@@ -1,7 +1,216 @@
 /*
- * D17 窗口背景：透明由原生 vibrancy（NSVisualEffectView / HudWindow 材质）提供，
- * 禁用 CSS 毛玻璃模糊；内容层一律实色（never glass）。
+ * 方案 A（2026-10-24）窗口背景：**不用原生 vibrancy / liquid glass**，改由 CSS
+ * `backdrop-filter` 提供毛玻璃（模糊桌面后面的内容），窗口本身 transparent
+ * （tauri.conf.json）+ `.app-shell` 半透明底色 + backdrop-filter。
+ *
+ * 为什么换路线：原生 NSVisualEffectView / NSGlassEffectView 的 backdrop 是
+ * **窗口服务器侧表面**，hide（orderOut）后不回收 → 桌面留一块浅灰矩形
+ * （clear_vibrancy 返回 Ok(false) 摘不掉）。纯 CSS 路线桌面上没有任何原生
+ * backdrop 表面，hide 无残留（同浮球窗）。
+ *
+ * 浅/深色跟随系统：本文件的 `:root` 定义深色变量（默认），
+ * `@media (prefers-color-scheme: light)` 覆盖浅色变量。所有组件 CSS 一律
+ * `var(--*)`，不硬编码色值——系统切浅色时整窗自动跟随。
+ * 注 1：浮球窗（floating_orb）也加载本文件，故变量同样可用；但浮球球体 / 弧形
+ * 菜单弧带是定稿校准的深色设计（不随系统变），只有气泡等浮在桌面上的元素用变量。
+ * 注 2：**不声明 `color-scheme`**——那会把未显式设 color 的元素的默认文字色
+ * （canvastext）从黑翻成白，FileChip 等浅色 pill 上的文字会被洗白。所有需要
+ * 变色的元素都显式用变量，不依赖默认色。
  */
+
+:root {
+  /* 不声明 color-scheme：见文件头注 2 */
+
+  /* ---- 窗口 / 卡片底色（毛玻璃靠 backdrop-filter，底色只做压暗） ---- */
+  --bg-main: rgba(24, 24, 27, 0.75); /* .app-shell：主窗毛玻璃底 */
+  --bg-card: rgba(24, 24, 27, 0.92); /* 输入框 / 下拉 / tool 卡 / 横幅 */
+  --bg-popover: rgba(24, 24, 27, 0.96); /* 命令提示浮层 / tooltip */
+  --bg-panel: rgba(24, 24, 27, 0.97); /* 角落面板 */
+  --bg-inset: rgba(0, 0, 0, 0.25); /* 代码 / JSON 参数凹槽 */
+  --bg-input: rgba(0, 0, 0, 0.3); /* 深底输入框 */
+  --bg-scrim: rgba(0, 0, 0, 0.3); /* 拖入覆盖层遮罩 */
+  --bg-drop: rgba(24, 24, 27, 0.85); /* 拖入覆盖层卡片 */
+  --bg-bubble: rgba(30, 36, 32, 0.88); /* 浮球弧形菜单气泡（深绿定稿色） */
+
+  /* ---- 文字 ---- */
+  --text-primary: #f4f4f5; /* 标题 / 主文字 */
+  --text-body: #d4d4d8; /* 正文 */
+  --text-meta: #e4e4e7; /* 次级标题 / 输入文字 */
+  --text-muted: rgba(255, 255, 255, 0.55);
+  --text-faint: rgba(255, 255, 255, 0.5);
+  --text-dim: rgba(255, 255, 255, 0.45);
+  --text-ghost: rgba(255, 255, 255, 0.4);
+  --text-faded: rgba(255, 255, 255, 0.38);
+  --text-faintest: rgba(255, 255, 255, 0.3);
+  --text-hover: rgba(255, 255, 255, 0.6); /* 文字 hover 提亮 */
+  --text-secondary: #a1a1aa; /* zinc-400：占位 / 次要标签 */
+  --text-tertiary: #71717a; /* zinc-500：删除钮 / 离线点 */
+
+  /* ---- 描边 ---- */
+  --border: rgba(255, 255, 255, 0.08);
+  --divider: rgba(255, 255, 255, 0.06);
+  --border-mid: rgba(255, 255, 255, 0.1);
+  --border-strong: rgba(255, 255, 255, 0.12);
+  --border-btn: rgba(255, 255, 255, 0.14);
+  --border-hover: rgba(255, 255, 255, 0.16);
+  --border-focus: rgba(255, 255, 255, 0.2);
+  --border-dashed: rgba(255, 255, 255, 0.55); /* 拖入虚线框 */
+
+  /* ---- 填充 ---- */
+  --fill-weak: rgba(255, 255, 255, 0.06);
+  --fill-soft: rgba(255, 255, 255, 0.07);
+  --fill: rgba(255, 255, 255, 0.08);
+  --fill-mid: rgba(255, 255, 255, 0.1);
+  --fill-strong: rgba(255, 255, 255, 0.18);
+  --fill-hover: rgba(255, 255, 255, 0.12); /* 按钮 hover 态 */
+  --fill-shimmer: rgba(255, 255, 255, 0.28);
+
+  /* ---- 语义色（浅色模式下整体加深，保证浅底对比度） ---- */
+  --accent: #4ade80;
+  --accent-soft: rgba(74, 222, 128, 0.16);
+  --accent-soft-hover: rgba(74, 222, 128, 0.28);
+  --danger: #fca5a5;
+  --danger-strong: #f87171;
+  --danger-soft: rgba(252, 165, 165, 0.5);
+  --danger-fill: rgba(252, 165, 165, 0.06);
+  --danger-border: rgba(252, 165, 165, 0.4); /* 拒绝按钮描边 */
+  --warn: #fcd34d;
+  --warn-soft: rgba(252, 211, 77, 0.35);
+  --warn-fill: rgba(252, 211, 77, 0.06);
+  --warn-glow: rgba(252, 211, 77, 0.55);
+  --info: #93c5fd;
+  --info-soft: rgba(147, 197, 253, 0.1);
+  --info-glow: rgba(147, 197, 253, 0.15);
+  --ok: #86efac;
+  --ok-soft: rgba(134, 239, 172, 0.4); /* 批准按钮描边 */
+
+  /* ---- 审批 severity 徽标（色板对齐浮球状态色） ---- */
+  --sev-critical: #fca5a5;
+  --sev-high: #fb923c;
+  --sev-medium: #fcd34d;
+  --sev-low: #a1a1aa;
+  --sev-info: #93c5fd;
+  --sev-safe: #86efac;
+
+  /* ---- 阴影 ---- */
+  --shadow-pop: 0 8px 24px rgba(0, 0, 0, 0.35);
+  --shadow-panel: 0 8px 28px rgba(0, 0, 0, 0.5);
+  --shadow-float: 0 6px 20px rgba(0, 0, 0, 0.4);
+  --shadow-bubble: 0 6px 20px rgba(0, 0, 0, 0.3);
+
+  /* ---- 附件 chip：浅色 pill（两种主题下都是浅底深字，故不做浅色覆盖） ---- */
+  --chip-bg: rgba(255, 255, 255, 0.72);
+  --chip-border: rgba(0, 0, 0, 0.12);
+  --chip-text: #27272a;
+  --chip-remove: #71717a;
+  --chip-danger-bg: #fdecec;
+  --chip-danger-border: #f0b4b4;
+  --chip-danger-text: #b91c1c;
+
+  /* ---- 连接状态灯 ---- */
+  --online: #22c55e;
+  --online-glow: rgba(34, 197, 94, 0.6);
+
+  /* ---- 录制 / 信息蓝（快捷键设置） ---- */
+  --info-ring: rgba(147, 197, 253, 0.2);
+  --info-border: rgba(147, 197, 253, 0.35);
+  --info-pulse: rgba(147, 197, 253, 0.3);
+  --info-pulse-weak: rgba(147, 197, 253, 0.08);
+
+  /* ---- 红点角标（有新版本） ---- */
+  --dot-red: #ef4444;
+  --dot-red-glow: rgba(239, 68, 68, 0.8);
+
+  /* ---- 极淡填充（快捷键行底） ---- */
+  --fill-hint: rgba(255, 255, 255, 0.025);
+}
+
+/* 浅色模式：系统 prefers-color-scheme: light 时整窗跟随（变量级联覆盖）。 */
+@media (prefers-color-scheme: light) {
+  :root {
+    /* 不声明 color-scheme：见文件头注 2 */
+
+    --bg-main: rgba(250, 250, 250, 0.75);
+    --bg-card: rgba(255, 255, 255, 0.92);
+    --bg-popover: rgba(255, 255, 255, 0.96);
+    --bg-panel: rgba(255, 255, 255, 0.97);
+    --bg-inset: rgba(0, 0, 0, 0.04);
+    --bg-input: rgba(0, 0, 0, 0.05);
+    --bg-scrim: rgba(0, 0, 0, 0.25);
+    --bg-drop: rgba(255, 255, 255, 0.85); /* 拖入覆盖层卡片 */
+    --bg-bubble: rgba(255, 255, 255, 0.88); /* 浮球弧形菜单气泡 */
+
+    --text-primary: #18181b;
+    --text-body: #3f3f46;
+    --text-meta: #27272a;
+    --text-muted: rgba(0, 0, 0, 0.55);
+    --text-faint: rgba(0, 0, 0, 0.5);
+    --text-dim: rgba(0, 0, 0, 0.45);
+    --text-ghost: rgba(0, 0, 0, 0.4);
+    --text-faded: rgba(0, 0, 0, 0.38);
+    --text-faintest: rgba(0, 0, 0, 0.3);
+    --text-hover: rgba(0, 0, 0, 0.6); /* 文字 hover 提亮 */
+    --text-secondary: #71717a;
+    --text-tertiary: #52525b;
+
+    --border: rgba(0, 0, 0, 0.08);
+    --divider: rgba(0, 0, 0, 0.06);
+    --border-mid: rgba(0, 0, 0, 0.1);
+    --border-strong: rgba(0, 0, 0, 0.12);
+    --border-btn: rgba(0, 0, 0, 0.14);
+    --border-hover: rgba(0, 0, 0, 0.16);
+    --border-focus: rgba(0, 0, 0, 0.22);
+    --border-dashed: rgba(0, 0, 0, 0.45); /* 拖入虚线框 */
+
+    --fill-weak: rgba(0, 0, 0, 0.04);
+    --fill-soft: rgba(0, 0, 0, 0.05);
+    --fill: rgba(0, 0, 0, 0.06);
+    --fill-mid: rgba(0, 0, 0, 0.08);
+    --fill-strong: rgba(0, 0, 0, 0.12);
+    --fill-hover: rgba(0, 0, 0, 0.09); /* 按钮 hover 态 */
+    --fill-shimmer: rgba(0, 0, 0, 0.2);
+
+    --accent: #16a34a;
+    --accent-soft: rgba(22, 163, 74, 0.12);
+    --accent-soft-hover: rgba(22, 163, 74, 0.2);
+    --danger: #dc2626;
+    --danger-strong: #b91c1c;
+    --danger-soft: rgba(220, 38, 38, 0.4);
+    --danger-fill: rgba(220, 38, 38, 0.06);
+    --danger-border: rgba(220, 38, 38, 0.4); /* 拒绝按钮描边 */
+    --warn: #b45309;
+    --warn-soft: rgba(180, 83, 9, 0.3);
+    --warn-fill: rgba(180, 83, 9, 0.06);
+    --warn-glow: rgba(180, 83, 9, 0.45);
+    --info: #2563eb;
+    --info-soft: rgba(37, 99, 235, 0.1);
+    --info-glow: rgba(37, 99, 235, 0.15);
+    --ok: #15803d;
+    --ok-soft: rgba(21, 128, 61, 0.4); /* 批准按钮描边 */
+
+    --sev-critical: #b91c1c;
+    --sev-high: #c2410c;
+    --sev-medium: #a16207;
+    --sev-low: #71717a;
+    --sev-info: #2563eb;
+    --sev-safe: #15803d;
+
+    --shadow-pop: 0 8px 24px rgba(0, 0, 0, 0.12);
+    --shadow-panel: 0 8px 28px rgba(0, 0, 0, 0.16);
+    --shadow-float: 0 6px 20px rgba(0, 0, 0, 0.14);
+    --shadow-bubble: 0 6px 20px rgba(0, 0, 0, 0.12);
+
+    --online: #16a34a;
+    --online-glow: rgba(22, 163, 74, 0.5);
+    --info-ring: rgba(37, 99, 235, 0.2);
+    --info-border: rgba(37, 99, 235, 0.35);
+    --info-pulse: rgba(37, 99, 235, 0.3);
+    --info-pulse-weak: rgba(37, 99, 235, 0.08);
+    --dot-red: #dc2626;
+    --dot-red-glow: rgba(220, 38, 38, 0.6);
+    --fill-hint: rgba(0, 0, 0, 0.03);
+  }
+}
 
 html,
 body {
@@ -9,6 +218,14 @@ body {
   margin: 0;
   height: 100%;
   overflow: hidden;
+  /*
+   * B2 修复（运行验证）：全局根补上系统 UI 字体栈，与 QwenPaw Console
+   * workspace.css / Atd 一致（本机即 SF Pro）。此前 body 未设 font-family，
+   * 落到浏览器默认（Times 系），正文字体与 QwenPaw 不一致。
+   * 代码块不受影响：.code-block-reference / .inline-code-chip / .file-chip /
+   * .tool-card__body 仍显式用 ui-monospace。
+   */
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
 }
 
 #root {
@@ -19,19 +236,18 @@ body {
   height: 100%;
   display: flex;
   flex-direction: column;
-  /* 冒烟三轮（Liquid Glass）：圆角与 NSGlassEffectView radius 20pt 对齐——
-   * glass 的 light rim 要顺着圆角露出，两者不一致会出现玻璃边缘和内容边缘错位 */
+  /* 圆角 20px：窗口透明 + 圆角，毛玻璃边缘随之露出（原由 NSGlassEffectView
+   * radius 20pt 提供，方案 A 起改由 CSS 负责） */
   border-radius: 20px;
   /*
-   * 冒烟修复一轮（浅色模式洗白）：内容画布实色压阵——D17 分层 =
-   * 窗口层透（html/body transparent 不动，原生材质从这透出）
-   *          + 内容层实（这里深底）。
-   * 二轮调参（B4 玻璃质感）：0.88 → 0.78，vibrancy 透出更明显（22% 氛围）。
-   * 三轮调参：0.78 → 0.80，对齐 Atd fill token（80% rgb(24,24,24)）。
-   * 对比度自查：#f4f4f5 on 80%#18181b+20%材质（最亮混合≈#464646）≈ 8.2:1，
-   * #d4d4d8 ≈ 5.9:1，均远超 WCAG 4.5:1；.38 元信息灰为 v8 规格的去强调值。
+   * 方案 A 毛玻璃：CSS backdrop-filter 模糊桌面后面的内容（替代原生 vibrancy）。
+   * --bg-main 半透明底色只做压暗 / 提亮，模糊由 backdrop-filter 出。
+   * 二轮调参：底色 0.80 → 0.75（透出更多桌面，玻璃感更明显）。
+   * -webkit- 前缀：WKWebView 需要（Chrome/Safari 同）。
    */
-  background: rgba(24, 24, 27, 0.80);
+  background: var(--bg-main);
+  -webkit-backdrop-filter: blur(20px) saturate(1.2);
+  backdrop-filter: blur(20px) saturate(1.2);
 }
 
 /* decorations:false 下的自绘拖拽区 */
@@ -53,9 +269,9 @@ body {
   margin: 0;
   text-align: center;
   font: 13px/1.6 -apple-system, "SF Pro Text", "PingFang SC", sans-serif;
-  color: #e4e4e7;
-  background: rgba(24, 24, 27, 0.92);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: var(--text-meta);
+  background: var(--bg-card);
+  border: 1px solid var(--border);
   border-radius: 12px;
   padding: 12px 16px;
 }
@@ -81,18 +297,18 @@ body {
 .md-li {
   font-size: 13px;
   line-height: 1.75;
-  color: #d4d4d8;
+  color: var(--text-body);
 }
 
 /* D16 引用式代码块：左侧 2px 淡竖线 + 等宽 + 无底色无圆角（不是深色卡片） */
 .code-block-reference {
-  border-left: 2px solid rgba(255, 255, 255, 0.16);
+  border-left: 2px solid var(--border-hover);
   padding-left: 11px;
   margin: 0 0 8px;
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 12px;
   line-height: 1.6;
-  color: #d4d4d8;
+  color: var(--text-body);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
   overflow-x: auto;
@@ -100,12 +316,12 @@ body {
 
 /* 行内代码 chip：淡底圆角等宽 */
 .inline-code-chip {
-  background: rgba(255, 255, 255, 0.07);
+  background: var(--fill-soft);
   border-radius: 4px;
   padding: 1px 5px;
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 0.92em;
-  color: #e4e4e7;
+  color: var(--text-meta);
 }
 
 /* ===== T9：四类信息分区（D16 规格写死） ===== */
@@ -128,12 +344,12 @@ body {
 .user-bubble {
   align-self: flex-end;
   max-width: 82%;
-  background: rgba(255, 255, 255, 0.07);
+  background: var(--fill-soft);
   border-radius: 14px 14px 4px 14px;
   padding: 9px 13px;
   font-size: 13px;
   line-height: 1.6;
-  color: #f4f4f5;
+  color: var(--text-primary);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
@@ -145,7 +361,7 @@ body {
   min-width: 0;
   font-size: 13px;
   line-height: 1.75;
-  color: #d4d4d8;
+  color: var(--text-body);
 }
 
 /* 3. 系统提示：居中淡色 */
@@ -153,18 +369,18 @@ body {
   align-self: center;
   text-align: center;
   font-size: 11px;
-  color: rgba(255, 255, 255, 0.3);
+  color: var(--text-faintest);
   padding: 4px 0;
 }
 
-/* 4. 流式光标：生成中答案末尾闪烁（2px 宽 12px 高 #4ade80） */
+/* 4. 流式光标：生成中答案末尾闪烁（2px 宽 12px 高 var(--accent)） */
 .stream-cursor {
   display: inline-block;
   width: 2px;
   height: 12px;
   margin-left: 2px;
   vertical-align: text-bottom;
-  background: #4ade80;
+  background: var(--accent);
   animation: blink 1s step-end infinite;
 }
 
@@ -195,11 +411,11 @@ body {
   cursor: pointer;
   text-align: left;
   font-size: 12px;
-  color: rgba(255, 255, 255, 0.38); /* 整行三成灰 */
+  color: var(--text-faded); /* 整行三成灰 */
 }
 
 .tool-row:hover {
-  color: rgba(255, 255, 255, 0.55);
+  color: var(--text-muted);
 }
 
 /* 完成对勾：淡绿 */
@@ -207,7 +423,7 @@ body {
   flex: none;
   width: 14px;
   font-size: 11px;
-  color: #4ade80;
+  color: var(--accent);
 }
 
 /* 运行中：shimmer 流光块（CSS 动画，无 JS 动画库） */
@@ -218,9 +434,9 @@ body {
   border-radius: 2px;
   background: linear-gradient(
     90deg,
-    rgba(255, 255, 255, 0.08) 25%,
-    rgba(255, 255, 255, 0.28) 50%,
-    rgba(255, 255, 255, 0.08) 75%
+    var(--fill) 25%,
+    var(--fill-shimmer) 50%,
+    var(--fill) 75%
   );
   background-size: 200% 100%;
   animation: shimmer 1.2s linear infinite;
@@ -246,17 +462,17 @@ body {
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
-  background: rgba(255, 255, 255, 0.07);
+  background: var(--fill-soft);
   border-radius: 4px;
   padding: 1px 6px;
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 11px;
-  color: rgba(255, 255, 255, 0.5);
+  color: var(--text-faint);
 }
 
 .tool-summary {
   flex: none;
-  color: rgba(255, 255, 255, 0.3);
+  color: var(--text-faintest);
 }
 
 .tool-arrow {
@@ -268,10 +484,10 @@ body {
 /* 展开参数卡片：1px 边框 rgba 白 .08 + 圆角 10 + header 28px */
 .tool-card {
   margin: 4px 0 6px 20px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--border);
   border-radius: 10px;
   overflow: hidden;
-  background: rgba(24, 24, 27, 0.92);
+  background: var(--bg-card);
 }
 
 .tool-card__header {
@@ -280,9 +496,9 @@ body {
   justify-content: space-between;
   height: 28px;
   padding: 0 10px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  border-bottom: 1px solid var(--divider);
   font-size: 11px;
-  color: rgba(255, 255, 255, 0.5);
+  color: var(--text-faint);
 }
 
 .tool-card__copy {
@@ -292,7 +508,7 @@ body {
 }
 
 .tool-card__copy:hover {
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--fill);
 }
 
 .tool-card__body {
@@ -303,16 +519,16 @@ body {
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 11px;
   line-height: 1.5;
-  color: rgba(255, 255, 255, 0.55);
+  color: var(--text-muted);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
 
 .tool-card__footer {
   padding: 6px 10px;
-  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  border-top: 1px solid var(--divider);
   font-size: 11px;
-  color: rgba(255, 255, 255, 0.38);
+  color: var(--text-faded);
   max-height: 80px;
   overflow: auto;
   white-space: pre-wrap;
@@ -327,16 +543,16 @@ body {
   justify-content: space-between;
   gap: 8px;
   padding: 5px 12px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  border-bottom: 1px solid var(--border);
   font-size: 11px;
-  color: rgba(255, 255, 255, 0.5);
-  background: rgba(24, 24, 27, 0.92);
+  color: var(--text-faint);
+  background: var(--bg-card);
 }
 
 .offline-banner__close {
   border: none;
   background: none;
-  color: rgba(255, 255, 255, 0.4);
+  color: var(--text-ghost);
   cursor: pointer;
   font-size: 11px;
   padding: 2px 4px;
@@ -344,7 +560,7 @@ body {
 }
 
 .offline-banner__close:hover {
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--fill);
 }
 
 /* ===== T11/T14：输入区 + 命令提示浮层 ===== */
@@ -353,7 +569,7 @@ body {
   flex: none;
   position: relative;
   padding: 8px 12px 10px;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  border-top: 1px solid var(--border);
 }
 
 .input-bar__row {
@@ -375,17 +591,17 @@ body {
 
 .input-bar__attach:hover {
   opacity: 0.9;
-  background: rgba(255, 255, 255, 0.06);
+  background: var(--fill-weak);
 }
 
 .input-bar__textarea {
   flex: 1;
   min-width: 0;
   resize: none;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid var(--border-mid);
   border-radius: 10px;
-  background: rgba(24, 24, 27, 0.92);
-  color: #f4f4f5;
+  background: var(--bg-card);
+  color: var(--text-primary);
   padding: 8px 10px;
   font: 13px/1.5 -apple-system, "SF Pro Text", "PingFang SC", sans-serif;
   outline: none;
@@ -393,7 +609,7 @@ body {
 }
 
 .input-bar__textarea:focus {
-  border-color: rgba(255, 255, 255, 0.2);
+  border-color: var(--border-focus);
 }
 
 .input-bar__send,
@@ -411,8 +627,8 @@ body {
 }
 
 .input-bar__send {
-  background: rgba(255, 255, 255, 0.1);
-  color: #f4f4f5;
+  background: var(--fill-mid);
+  color: var(--text-primary);
 }
 
 .input-bar__send:disabled {
@@ -421,16 +637,16 @@ body {
 }
 
 .input-bar__send:not(:disabled):hover {
-  background: rgba(255, 255, 255, 0.18);
+  background: var(--fill-strong);
 }
 
 .input-bar__stop {
-  background: rgba(74, 222, 128, 0.16);
-  color: #4ade80;
+  background: var(--accent-soft);
+  color: var(--accent);
 }
 
 .input-bar__stop:hover {
-  background: rgba(74, 222, 128, 0.28);
+  background: var(--accent-soft-hover);
 }
 
 .input-bar__hint {
@@ -438,7 +654,7 @@ body {
   gap: 6px;
   margin-top: 4px;
   font-size: 11px;
-  color: rgba(255, 255, 255, 0.3);
+  color: var(--text-faintest);
 }
 
 /* T11：命令提示浮层（输入框上方） */
@@ -449,10 +665,10 @@ body {
   bottom: calc(100% - 4px);
   max-height: 240px;
   overflow-y: auto;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--border);
   border-radius: 10px;
-  background: rgba(24, 24, 27, 0.96);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  background: var(--bg-popover);
+  box-shadow: var(--shadow-pop);
   z-index: 10;
 }
 
@@ -469,13 +685,13 @@ body {
 }
 
 .cmd-palette__item--active {
-  background: rgba(255, 255, 255, 0.07);
+  background: var(--fill-soft);
 }
 
 .cmd-palette__name {
   flex: none;
   font: 500 12px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace;
-  color: #e4e4e7;
+  color: var(--text-meta);
 }
 
 .cmd-palette__desc {
@@ -485,5 +701,145 @@ body {
   white-space: nowrap;
   text-overflow: ellipsis;
   font: 11px/1.4 -apple-system, "SF Pro Text", "PingFang SC", sans-serif;
-  color: rgba(255, 255, 255, 0.38);
+  color: var(--text-faded);
+}
+
+/* ============================================================
+ * 模块 1（1.4）：浮球 ↔ 主窗口三段接力动画
+ *   呼出：浮球收缩 120ms → 主窗 scale .35→1 280ms（origin 动态朝浮球）
+ *         → 浮球淡出让位 150ms
+ *   缩回：主窗收缩 280ms → 浮球 spring 弹回 200ms
+ *   全程只用 transform/opacity，不动窗口尺寸（避开 set_size 每帧重排）
+ * ============================================================ */
+
+.app-shell {
+  transform-origin: var(--summon-origin-x, right) 50%;
+  /*
+   * 注意：will-change 不放在这条常驻规则里——本元素同时有 backdrop-filter（毛玻璃），
+   * 常驻 will-change: transform 会把它长期提升成合成层，WebKit 下可能影响
+   * backdrop 采样。故 will-change 只加在两个动画态类上（见下），动画结束即回收。
+   */
+}
+
+/* 呼出：280ms 放大 .35 → 1 */
+.app-shell.app-relay-summon {
+  will-change: transform, opacity;
+  animation: app-summon-grow 280ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@keyframes app-summon-grow {
+  from {
+    transform: scale(0.35);
+    opacity: 0.4;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+/* 缩回：280ms 收缩 → 1 → .35 */
+.app-shell.app-relay-recall {
+  will-change: transform, opacity;
+  animation: app-recall-shrink 280ms cubic-bezier(0.55, 0, 0.55, 0.2) forwards;
+}
+
+@keyframes app-recall-shrink {
+  from {
+    transform: scale(1);
+    opacity: 1;
+  }
+  to {
+    transform: scale(0.35);
+    opacity: 0;
+  }
+}
+
+/* 模块 1（1.6）：投放文件 chip 区 */
+.app-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 0 16px 8px;
+  flex: none;
+}
+
+.app-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  padding: 4px 8px;
+  border-radius: 10px;
+  background: var(--fill);
+  border: 1px solid var(--border-strong);
+  font: 11px/1.5 -apple-system, "SF Pro Text", "PingFang SC", sans-serif;
+  color: var(--text-body);
+}
+
+.app-chip.failed {
+  border-color: var(--danger-soft);
+  color: var(--danger);
+}
+
+.app-chip__url {
+  color: var(--text-faded);
+  font-style: normal;
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-chip button {
+  border: none;
+  background: none;
+  color: var(--text-faint);
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 1;
+  padding: 0 2px;
+}
+
+.app-chip button:hover {
+  color: var(--text-primary);
+}
+
+/* 模块 2（2.3）：拖入覆盖层「投放给 agent」 */
+.drop-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-scrim);
+  backdrop-filter: blur(2px);
+  /*
+   * inherit 圆角：.app-shell 上的 backdrop-filter 会使其成为 fixed 定位的包含块
+   * （本层 position:fixed 的包含块从视口变成 .app-shell），故此处必须显式继承
+   * 20px 圆角，否则覆盖层的直角会画出窗口圆角外（透明区被抹黑）。
+   */
+  border-radius: inherit;
+  pointer-events: none; /* 不挡拖放事件：drop 仍冒泡到 window 监听 */
+}
+
+.drop-overlay__card {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 14px 24px;
+  border-radius: 14px;
+  border: 1.5px dashed var(--border-dashed);
+  background: var(--bg-drop);
+  color: var(--text-primary);
+  font-size: 15px;
+}
+
+/* 模块 2（2.2）：输入框上方附件 chip 行 */
+.input-bar__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding-bottom: 6px;
 }

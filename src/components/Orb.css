@@ -1,0 +1,512 @@
+/*
+ * 模块 1：浮球视觉样式（Orb.tsx 配套）。
+ *
+ * 校准基准（HTML 定稿）：
+ *   - 浮球交互总演示-20261020-223000（集大成：7 态 / 呼出缩回 / 弧形菜单 / 拖拽 / 快捷键面板）
+ *   - 浮球弧形菜单 v6-20261020-004500（连续弧带 + 统一 300×300 坐标系）
+ *   - 快捷键重设面板-20261020
+ *   - 浮球柔和光晕版-20261020-220000 / 设计最终版-20261020-013226（流光 / 角标 / 光晕分层）
+ *
+ * 1.1：50px 圆形浮球——白→浅灰渐变（#fff→#f0f0f3）
+ *   + 多层柔和阴影（0 4px 14px + 0 1px 3px + inset 白高光）+ 中间品牌爪印
+ *   （2026-10-27：1px 细边框已去除——放大态下可见"贴纸框"界线，边缘改由
+ *   投影 + inset 高光定义；爪印图 30px→32px 圆角化覆盖球面，米白圆底界圈
+ *   推到浮球轮廓处=球体自身的边）。
+ *   （方案 A：固定白 #fff + 黑描边 #1a1a1a，不随状态色；状态色由 1.2 流光/角标承担）。
+ * 1.2：五色状态态——细边框流光（conic 头亮尾淡 + 5px 头亮珠 + 3 颗粒子拖尾 +
+ *   drop-shadow 氛围光）+ 苹果风角标（17px + 2px 白边 + right/top -3px（2026-10-27
+ *   由 -6 内移：60×60 窗口防角标右缘被裁），双层辉光
+ *   近 6px 实 + 远 14px 虚）。小爪图表面零遮挡（定稿硬要求）——光晕只来自流光的
+ *   drop-shadow 与角标 box-shadow，不铺整球。
+ *   流光旋转周期（定稿）：常态 6s / 生成 4s / 审批 2.5s / 完成 3s / 错误 2.5s。
+ * 1.4：Dock 三段接力——呼出 120ms 收缩 + 150ms 淡出让位；缩回 200ms spring
+ *   弹回。全程只用 transform/opacity，不动窗口尺寸。
+ * 1.5：弧形菜单——v6 连续弧带（300×300 统一坐标系，圆心 = 浮球中心；中线半径
+ *   70 / stroke-width 48 / linecap round），4 个透明热点段叠在上面做 hover 检测，
+ *   hover 弧段加深（不整块变绿）+ 图标变绿 #4ade80 微放大 1.12（--menu-hover-scale），
+ *   气泡在开口正中；开口方向随浮球所在半屏自适应（右半屏 → 弧带在左、开口朝右）。
+ */
+
+.orb-root {
+  --orb-color: #71717a;
+  --orb-size: 50px;
+  --orb-hit: 60px;
+  /* 流光旋转周期（定稿默认 = 常态 6s，各态在下方覆盖） */
+  --orb-stream-dur: 6s;
+  /*
+   * A1 修复：命中区始终是 60×60 并相对窗口居中——常态窗口 60×60 时与原来
+   * 一致；菜单展开时 Rust 把窗口放大到 300×300（容纳弧带外半径 94 + 气泡
+   * 约 146），浮球/弧带随本容器一起居中，弧带不再被系统裁剪。
+   * 注意：命中区不随窗口放大（放大区只由 .orb-arc-menu 的弧段/图标吃事件），
+   * 避免点透明区误触发「呼出主窗口」。
+   */
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: var(--orb-hit);
+  height: var(--orb-hit);
+  /* 透明命中区：窗口层透明，只有 .orb-body 可点 */
+  user-select: none;
+  -webkit-user-select: none;
+  cursor: grab;
+  touch-action: none;
+  font-family: -apple-system, "SF Pro Text", "PingFang SC", sans-serif;
+}
+
+.orb-root:active {
+  cursor: grabbing;
+}
+
+/* 浮球本体：50px 圆，白→浅灰渐变 + 细边框 + 多层柔和阴影 + inset 白高光 */
+.orb-body {
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  width: var(--orb-size);
+  height: var(--orb-size);
+  border-radius: 50%;
+  background: linear-gradient(180deg, #ffffff 0%, #f0f0f3 100%);
+  /* 2026-10-27：1px 边框去除（用户实测放大态下浮球面可见一圈"贴纸框"界线，
+     图放大覆盖后浮球边缘由投影 + inset 高光定义，不再需要 border） */
+  box-shadow:
+    0 4px 14px rgba(0, 0, 0, 0.18),
+    0 1px 3px rgba(0, 0, 0, 0.12),
+    inset 0 1px 0 rgba(255, 255, 255, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #3f3f46;
+  /* 定稿：浮球层级高于菜单容器，菜单展开时浮球仍可拖动 */
+  z-index: 12;
+  transition:
+    transform 180ms cubic-bezier(0.34, 1.56, 0.64, 1),
+    box-shadow 150ms ease;
+  will-change: transform;
+}
+
+/* 品牌爪印（方案 A：固定白 + 黑描边，不随状态色；状态色由流光/光晕/角标承担）。
+   透明背景矢量 SVG，30px 适配 50px 浮球（爪印占中央、不溢出、缩放清晰）。 */
+.orb-paw {
+  position: relative;
+  z-index: 1;
+  width: 32px;
+  height: 32px;
+  object-fit: contain;
+  display: block;
+  /* macOS WKWebView：HTML 层禁拖外的 CSS 双保险（-webkit-user-drag 是生效关键） */
+  user-drag: none;
+  -webkit-user-drag: none;
+  /* 32px 方图四角已不超出浮球圆形轮廓（半径 25 > 32×√2/2≈22.6）；圆角化保留
+     （当前无实际作用，防后续调大复发白角棱边）。不能用 body overflow:hidden
+     （会裁角标与流光）。 */
+  border-radius: 50%;
+}
+
+/* 菜单展开：浮球外圈一层绿环（定稿 #orb.menu-open） */
+.orb-root[data-menu-open="true"] .orb-body {
+  box-shadow:
+    0 6px 20px rgba(0, 0, 0, 0.25),
+    0 0 0 3px rgba(134, 239, 172, 0.5),
+    inset 0 1px 0 rgba(255, 255, 255, 0.6);
+}
+
+/* ---------- 1.2 五色态视觉 ---------- */
+
+/*
+ * 细边框流光：conic 头亮尾淡，绕边旋转。
+ * inset -1.5px → 外径 53px（半径 26.5），mask 裁 82%–96% 环带（约 3.7px 细线），
+ * 头亮珠 / 粒子正好落在可见环带内。氛围光 = 自身 drop-shadow（不定稿另有铺面光晕，
+ * 以保证「小爪图表面零遮挡」）。
+ */
+.orb-stream {
+  position: absolute;
+  inset: -1.5px;
+  border-radius: 50%;
+  background: conic-gradient(
+    from 0deg,
+    var(--orb-color) 0deg,
+    color-mix(in srgb, var(--orb-color) 90%, transparent) 45deg,
+    color-mix(in srgb, var(--orb-color) 50%, transparent) 95deg,
+    color-mix(in srgb, var(--orb-color) 15%, transparent) 160deg,
+    color-mix(in srgb, var(--orb-color) 6%, transparent) 230deg,
+    color-mix(in srgb, var(--orb-color) 20%, transparent) 300deg,
+    color-mix(in srgb, var(--orb-color) 60%, transparent) 345deg,
+    var(--orb-color) 360deg
+  );
+  -webkit-mask: radial-gradient(closest-side, transparent 82%, #000 84%, #000 96%, transparent 100%);
+  mask: radial-gradient(closest-side, transparent 82%, #000 84%, #000 96%, transparent 100%);
+  animation: orb-stream-spin var(--orb-stream-dur) linear infinite;
+  pointer-events: none;
+  z-index: 2;
+}
+
+/* 头亮珠：5px，双层辉光（近 8px + 近距 3px） */
+.orb-stream::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: -1px;
+  width: 5px;
+  height: 5px;
+  margin-left: -2.5px;
+  border-radius: 50%;
+  background: var(--orb-color);
+  box-shadow:
+    0 0 8px var(--orb-color),
+    0 0 3px var(--orb-color);
+}
+
+/*
+ * 尾部粒子拖尾（3 颗，随流光同步转）。
+ * 定稿注入参数：角度 120/155/190°（越靠后越淡）、粒径 2.2/1.7/1.2px、
+ * 不透明度 .5/.35/.2，半径 24px。
+ */
+.orb-stream i {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: var(--ps);
+  height: var(--ps);
+  border-radius: 50%;
+  margin-top: calc(var(--ps) / -2);
+  margin-left: calc(var(--ps) / -2);
+  background: var(--orb-color);
+  opacity: var(--po);
+  transform: rotate(var(--pa)) translateY(-24px) rotate(calc(var(--pa) * -1));
+}
+
+@keyframes orb-stream-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* 旋转周期（定稿：常态 6s / 生成 4s / 审批 2.5s / 完成 3s / 错误 2.5s） */
+.orb-root[data-status="generating"] {
+  --orb-stream-dur: 4s;
+}
+.orb-root[data-status="approval"] {
+  --orb-stream-dur: 2.5s;
+}
+.orb-root[data-status="done"] {
+  --orb-stream-dur: 3s;
+}
+.orb-root[data-status="error"] {
+  --orb-stream-dur: 2.5s;
+}
+/* 拖入态复用审批黄，节奏同步取 2.5s */
+.orb-root[data-status="dragOver"] {
+  --orb-stream-dur: 2.5s;
+}
+
+/* 氛围光晕分层（定稿柔和光晕版）：常态 3px/45%，四色态 6px/45%，错误 6px/50% */
+.orb-root[data-status="idle"] .orb-stream,
+.orb-root[data-status="dragging"] .orb-stream {
+  filter: drop-shadow(0 0 3px color-mix(in srgb, var(--orb-color) 45%, transparent));
+}
+.orb-root[data-status="generating"] .orb-stream,
+.orb-root[data-status="approval"] .orb-stream,
+.orb-root[data-status="done"] .orb-stream,
+.orb-root[data-status="dragOver"] .orb-stream {
+  filter: drop-shadow(0 0 6px color-mix(in srgb, var(--orb-color) 45%, transparent));
+}
+.orb-root[data-status="error"] .orb-stream {
+  filter: drop-shadow(0 0 6px color-mix(in srgb, var(--orb-color) 50%, transparent));
+}
+
+/*
+ * 苹果风角标（定稿）：17px + 2px 白边 + right/top -3px（窗口 60×60 防裁切内移）（约 2/3 压浮球、1/3 露出）。
+ * 双层辉光：近 6px 实（--badge-glow 50%）+ 远 14px 虚（--badge-glow-soft 25%）。
+ * 展示态：审批=黄 / 完成=绿 / 错误=红。
+ */
+.orb-badge {
+  position: absolute;
+  right: -3px;
+  top: -3px;
+  width: 17px;
+  height: 17px;
+  border-radius: 50%;
+  border: 2px solid #ffffff;
+  box-shadow:
+    0 1px 4px rgba(0, 0, 0, 0.28),
+    0 0 6px var(--badge-glow, transparent),
+    0 0 14px var(--badge-glow-soft, transparent);
+  z-index: 5;
+  pointer-events: none;
+}
+.orb-badge--approval {
+  background: #fcd34d;
+  --badge-glow: rgba(252, 211, 77, 0.5);
+  --badge-glow-soft: rgba(252, 211, 77, 0.25);
+}
+.orb-badge--done {
+  background: #86efac;
+  --badge-glow: rgba(134, 239, 172, 0.5);
+  --badge-glow-soft: rgba(134, 239, 172, 0.25);
+}
+.orb-badge--error {
+  background: #fca5a5;
+  --badge-glow: rgba(252, 165, 165, 0.5);
+  --badge-glow-soft: rgba(252, 165, 165, 0.25);
+}
+
+/* 生成中：整球呼吸 1.6s scale 1 → 1.08（1.3 约束） */
+.orb-root[data-status="generating"] .orb-body {
+  animation: orb-breathe 1.6s ease-in-out infinite;
+}
+
+@keyframes orb-breathe {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.08);
+  }
+}
+
+/* 拖入态：scale 1.15（--drag-over-scale）+ 📥 图标。
+   2026-10-27：外扩黄阴影（0 4px 18px 黄55%）改 inset 内透黄光——body scale 1.15
+   后阴影半径约 41px 超出 60×60 窗口半宽 30px，被窗口方边裁断成"方形淡黄背景"
+   （用户实测截图）。内光不超窗无裁切；外圈氛围由 .orb-stream 的 drop-shadow
+   黄 45% 承担（dragOver 复用审批黄基色）。 */
+.orb-root[data-status="dragOver"] .orb-body {
+  transform: scale(var(--drag-over-scale, 1.15));
+  box-shadow:
+    inset 0 0 14px color-mix(in srgb, var(--orb-color) 40%, transparent),
+    0 1px 3px rgba(0, 0, 0, 0.12),
+    inset 0 1px 0 rgba(255, 255, 255, 0.6);
+}
+
+.orb-drop-icon {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 18px;
+  pointer-events: none;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.3));
+}
+
+/* ---------- 1.4 三段接力动画 ---------- */
+
+/* 呼出：浮球收缩 120ms（定稿 cubic-bezier(.4,0,1,1)）后淡出让位 150ms */
+.orb-root.orb-summon .orb-body {
+  animation: orb-summon-shrink var(--summon-shrink-ms) cubic-bezier(0.4, 0, 1, 1) forwards;
+}
+
+.orb-root.orb-summon {
+  animation: orb-summon-fade var(--summon-fade-ms) ease-in var(--summon-shrink-ms) forwards;
+}
+
+@keyframes orb-summon-shrink {
+  to {
+    transform: scale(0.6);
+  }
+}
+
+@keyframes orb-summon-fade {
+  to {
+    opacity: 0;
+  }
+}
+
+/* 缩回：浮球 spring 弹回 200ms（定稿 cubic-bezier(.34,1.56,.64,1)） */
+.orb-root.orb-recall .orb-body {
+  animation: orb-recall-spring var(--recall-spring-ms) cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@keyframes orb-recall-spring {
+  0% {
+    transform: scale(0.6);
+    opacity: 0.4;
+  }
+  60% {
+    transform: scale(1.12);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+/* ---------- 1.5 右键弧形菜单（v6 连续弧带）---------- */
+
+/*
+ * 统一 300×300 坐标系：容器圆心 (150,150) 与浮球中心重合（v6 修正②，治错位）。
+ * 展开动画（定稿）：scale(.5) rotate(-10deg) → scale(1) rotate(0)，350ms
+ * cubic-bezier(.16,1,.3,1) + 透明度 250ms。
+ */
+.orb-arc-menu {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 300px;
+  height: 300px;
+  z-index: 10;
+  transform: translate(-50%, -50%) scale(0.5) rotate(-10deg);
+  opacity: 0;
+  pointer-events: none;
+  transition:
+    transform 350ms cubic-bezier(0.16, 1, 0.3, 1),
+    opacity 250ms ease;
+}
+
+.orb-arc-menu[data-open="true"] {
+  transform: translate(-50%, -50%) scale(1) rotate(0deg);
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* svg 画布本身不吃事件（只有弧段 / 图标可点），避免展开后出现点击死区 */
+.orb-arc-svg {
+  position: absolute;
+  left: 0;
+  top: 0;
+  pointer-events: none;
+}
+
+/*
+ * 热点段：同中线弧的子弧，默认透明，hover 变「稍亮的深色」rgba(62,76,64,.95)
+ * （v6 修正⑤：段只做深浅变化，不整块变绿；butt 端让边界清晰）。
+ * stroke-width 48 = 弧带宽（内 46 / 外 94），与底弧一致。
+ */
+.orb-arc-seg {
+  fill: none;
+  stroke: transparent;
+  stroke-width: 48px;
+  stroke-linecap: butt;
+  pointer-events: stroke;
+  cursor: pointer;
+  transition: stroke 150ms ease;
+}
+
+.orb-arc-menu[data-open="true"] .orb-arc-seg {
+  pointer-events: stroke;
+}
+
+.orb-arc-seg[data-active="true"] {
+  stroke: rgba(62, 76, 64, 0.95);
+}
+
+/* 图标：中线半径 70 上、段中点角；34px 命中圆 + 21px 线性图标 */
+.orb-arc-icon {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: rgba(255, 255, 255, 0.95);
+  z-index: 13;
+  pointer-events: none;
+  transition:
+    color 150ms ease,
+    transform 150ms ease;
+}
+
+.orb-arc-menu[data-open="true"] .orb-arc-icon {
+  pointer-events: auto;
+}
+
+/* hover：图标变亮绿 #4ade80 + 微放大 1.12（--menu-hover-scale） */
+.orb-arc-icon[data-active="true"] {
+  color: #4ade80;
+  transform: translate(-50%, -50%) scale(var(--menu-hover-scale, 1.12));
+}
+
+.orb-arc-icon svg {
+  width: 21px;
+  height: 21px;
+  display: block;
+  /* 图钉直立/斜倒翻转动画：切换置顶时钉子弹一下（spring 回弹） */
+  transition: transform 240ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+/*
+ * 图钉（置顶开关）状态可视化——「直立 vs 斜倒」+「高亮 vs 灰」双通道，一眼可辨：
+ *   pinned=true  置顶中 → 直立（rotate 0°）+ 亮绿 #4ade80 + 辉光 + 钉头实心填充
+ *                 （视觉上「竖直钉住」）
+ *   pinned=false 未置顶 → 斜倒（rotate 45°）+ 灰色 #a1a1aa（zinc-400）描边、钉头镂空
+ *                 （视觉上「倒伏 / 没钉住」）
+ * 气泡文案也会带「置顶 ✓」，第三重确认，避免用户猜「到底置顶了没有」。
+ */
+.orb-arc-icon[data-pinned="false"] {
+  color: #a1a1aa;
+}
+/* 未置顶：图钉斜倒 45°（绕自身中心倾斜，像被拔出的钉） */
+.orb-arc-icon[data-pinned="false"] svg {
+  transform: rotate(45deg);
+}
+
+.orb-arc-icon[data-pinned="true"] {
+  color: #4ade80;
+  filter: drop-shadow(0 0 6px rgba(74, 222, 128, 0.55));
+}
+/* 置顶中：图钉直立 */
+.orb-arc-icon[data-pinned="true"] svg {
+  transform: rotate(0deg);
+}
+
+/* 置顶中：钉头从描边变实心（视觉上「按下去/钉住了」） */
+.orb-arc-icon[data-pinned="true"] svg path:first-of-type {
+  fill: currentColor;
+}
+
+/*
+ * hover 反馈优先（特异性 0,3,0 > data-pinned 的 0,2,0）：鼠标悬停图钉时，不论
+ * 当前置顶与否都亮绿 #4ade80——未置顶时给「点我置顶」的可点提示，置顶时保持
+ * 高亮；移开后回到 resting 态，仍由上面两条 data-pinned 规则决定灰/绿。
+ * 为什么需要这条：[data-active="true"] 与 [data-pinned="false"] 特异性相同
+ * （都是 0,2,0）而 pinned 规则在文件更后面 → 同分后者胜，悬停未置顶图钉会被
+ * 灰覆盖，hover 变绿反馈整条丢失（这正是「图钉交互没显示」的组成部分）。
+ * 斜倒/直立不受影响：svg 的 transform 规则特异性 0,3,1 > 0,2,1，仍归 data-pinned 管。
+ */
+.orb-arc-icon[data-active="true"][data-pinned] {
+  color: #4ade80;
+}
+
+/* 气泡：开口正中（v6 修正③），紧贴弧的两个开口端之间。
+ * 方案 A：气泡浮在桌面上（不落在深色弧带上），故底色/文字/描边走 app.css 的
+ * CSS 变量，跟随系统浅深色；弧带本身与图标仍是定稿校准的深色设计，不随系统变
+ * （浅色模式下深弧带上的浅色图标才可读）。 */
+.orb-arc-bubble {
+  position: absolute;
+  left: 150px;
+  top: 150px;
+  transform: translate(16px, -50%) scale(0.85);
+  background: var(--bg-bubble);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--border-btn);
+  border-radius: 9px;
+  padding: 8px 15px;
+  font-size: 12px;
+  color: var(--text-meta);
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition:
+    opacity 150ms,
+    transform 150ms;
+  box-shadow: var(--shadow-bubble);
+  z-index: 15;
+}
+
+.orb-arc-bubble.show {
+  opacity: 1;
+  transform: translate(16px, -50%) scale(1);
+}
+
+/* 开口朝左（弧带在右半）时，气泡翻到圆心左侧 */
+.orb-arc-menu[data-side="right"] .orb-arc-bubble {
+  transform: translate(calc(-100% - 16px), -50%) scale(0.85);
+}
+
+.orb-arc-menu[data-side="right"] .orb-arc-bubble.show {
+  transform: translate(calc(-100% - 16px), -50%) scale(1);
+}

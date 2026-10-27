@@ -20,8 +20,9 @@
 import { fetch as tauriFetch } from "@tauri-apps/plugin-http";
 
 import { getCurrentAgentId } from "./session";
+import { getApiBase } from "./connection";
 
-const API_BASE = "http://localhost:8088";
+// API base 由模块 5 connection.ts 解析并持久化（端口发现 + 自动重连），请求时经 getApiBase() 读取
 const DEFAULT_AGENT_ID = "default";
 
 /** D15：channel 固定 console */
@@ -78,7 +79,15 @@ export interface SendChatMessageParams {
   sessionId?: string | null;
   /** user_id，默认 console-user */
   userId?: string;
+  /** 模块 2（2.4）：附件 content part（统一 upload 后 url 转 image_url / file_url） */
+  attachments?: ChatContentPart[];
 }
+
+/** chat input content part（模块 2.4：文本 + 图片/文件附件）。 */
+export type ChatContentPart =
+  | { type: "text"; text: string }
+  | { type: "image"; image_url: string }
+  | { type: "file"; file_url: string };
 
 /** 带上下文的请求错误（HTTP 非 2xx 或网络不可达） */
 export class ApiError extends Error {
@@ -108,7 +117,7 @@ function buildHeaders(agentId: string, extra?: Record<string, string>): Record<s
 async function request<T>(path: string, agentId: string, init?: HttpRequestInit): Promise<T> {
   let res: HttpResponse;
   try {
-    res = await tauriFetch(`${API_BASE}${path}`, {
+    res = await tauriFetch(`${getApiBase()}${path}`, {
       ...init,
       headers: buildHeaders(agentId, init?.headers as Record<string, string> | undefined),
     });
@@ -142,14 +151,17 @@ export async function getChatHistory(agentId: string, chatId: string): Promise<C
 /**
  * POST /api/console/chat —— 返回原始 Response，T6 的 SSE 消费（fetch + ReadableStream）在此基础上接手。
  * 请求体按官方 API 文档：input 数组 + session_id + user_id + channel: "console"。
+ * 模块 2（2.4）：attachments 作为附加 content part 拼在同一条 user 消息的 content 数组里。
  */
 export async function sendChatMessage(params: SendChatMessageParams): Promise<HttpResponse> {
-  const { text, agentId, sessionId, userId = "console-user" } = params;
+  const { text, agentId, sessionId, userId = "console-user", attachments } = params;
+  const content: ChatContentPart[] = [{ type: "text", text }];
+  if (attachments && attachments.length > 0) content.push(...attachments);
   const body = {
     input: [
       {
         role: "user",
-        content: [{ type: "text", text }],
+        content,
       },
     ],
     ...(sessionId ? { session_id: sessionId } : {}),
@@ -158,7 +170,7 @@ export async function sendChatMessage(params: SendChatMessageParams): Promise<Ht
   };
   let res: HttpResponse;
   try {
-    res = await tauriFetch(`${API_BASE}/api/console/chat`, {
+    res = await tauriFetch(`${getApiBase()}/api/console/chat`, {
       method: "POST",
       headers: buildHeaders(resolveAgentId(agentId), { Accept: "text/event-stream" }),
       body: JSON.stringify(body),

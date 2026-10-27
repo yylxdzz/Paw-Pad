@@ -1,9 +1,9 @@
 /**
  * T10：工具行 + 展开参数卡片（D16）。
  *
- * - 完成态：淡绿 ✓（#4ade80）；运行态：shimmer 流光块（CSS @keyframes，无 JS 动画库）
+ * - 完成态：淡绿 ✓（var(--accent)）；运行态：shimmer 流光块（CSS @keyframes，无 JS 动画库）
  * - 单行：✓/shimmer + 动词 + 文件 chip（淡底圆角等宽）+ 尾部数据 + 行尾箭头 ▸/▾
- * - 整行三成灰 rgba(255,255,255,.38)；点击行展开/收起参数卡片（本地 state，多行各自独立）
+ * - 整行三成灰 var(--text-faded)；点击行展开/收起参数卡片（本地 state，多行各自独立）
  * - 运行中行也能点开（条件 6）：running 时 footer 显示"运行中…"
  *
  * 纯函数（node 可测）：summaryForTool / verbForTool / fileChipFor。
