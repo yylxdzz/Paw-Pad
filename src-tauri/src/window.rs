@@ -15,7 +15,7 @@
 //! 收益顺带：CSS 变量 + `prefers-color-scheme` 让主窗口浅/深色跟随系统
 //! （原生 vibrancy 只提供材质、不提供前景色板，做不到浅色模式）。
 
-use tauri::{Emitter, EventTarget, Manager};
+use tauri::{Emitter, EventTarget, Manager, Runtime};
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
 
 /// 全局呼出/隐藏快捷键（默认 Cmd+Shift+Space）
@@ -59,6 +59,35 @@ pub fn hide_main_window(app: tauri::AppHandle) -> Result<(), String> {
     hide_main_window_on_main_thread(&app)
 }
 
+/// D38（2026-10-29）：缩回动画起点（0ms）即刻摘除主窗红绿灯按钮。
+///
+/// 为什么需要独立命令（而非沿用 hide_main_window 里的 D37 摘钮）：
+/// 前端 recallMain() 的 280ms CSS 缩回动画会把 `.app-shell` 缩到 0——
+/// 窗口主体从画面消失——但原生红绿灯（NSWindow standardWindowButtons）
+/// 不受 CSS 管，动画尾段（约 130~280ms）只剩三颗按钮单独可见。
+/// 30fps 录屏逐帧实证：残留约 140ms（4.53s~4.67s 共 4 帧），
+/// 主体深色像素 4.53s 归零而红绿灯颜色簇 4.67s 才消失。
+/// D37 在 hide_main_window（280ms 末尾）里摘钮：① 时机太晚（残留窗口
+/// 130~280ms 已过）② 与 hide() 同 runloop pass 未被合成——双重无效。
+///
+/// 本命令只做 setHidden:YES（不 hide、不拆阴影）——由前端 recallMain()
+/// 在动画启动同时 invoke，整个 280ms 缩回期间按钮已不可见。
+/// 恢复按钮（setHidden:NO）仍在 summon_main 的 show 前主线程闭包（D37）。
+#[tauri::command]
+pub fn hide_traffic_lights(app: tauri::AppHandle) -> Result<(), String> {
+    let window = app
+        .get_webview_window("main")
+        .ok_or_else(|| "main window not found".to_string())?;
+    let _ = app.run_on_main_thread(move || {
+        set_standard_window_buttons_hidden(&window, true);
+        crate::logger::info(
+            "window",
+            "D38: traffic lights hidden at recall start (0ms)",
+        );
+    });
+    Ok(())
+}
+
 /// hide 主窗口的收尾，并保证 AppKit 视图操作跑在主线程。
 ///
 /// 方案 A（2026-10-24）：主窗口已无原生 vibrancy / liquid glass 材质（改用 CSS
@@ -75,6 +104,13 @@ pub fn hide_main_window_on_main_thread(app: &tauri::AppHandle) -> Result<(), Str
     let (tx, rx) = std::sync::mpsc::channel::<Result<(), String>>();
     let window_for_main = window.clone();
     let _ = app.run_on_main_thread(move || {
+        // D37：hide 前摘除 Overlay 标题栏红绿灯按钮。decorations:true +
+        // titleBarStyle:"Overlay" + transparent:true 组合下，NSWindow orderOut 后
+        // WindowServer 不回收 standardWindowButtons 的合成表面，桌面上残留
+        // 「幽灵红绿灯」（2026-10-28 录屏复现 + 日志实证 hide 本身成功
+        // is_visible=false，系统层缺陷非本应用 bug，见 D37）。窗口仍可见时
+        // 先 setHidden:YES 强制主题框重绘移除按钮表面，再 orderOut 即无残留。
+        set_standard_window_buttons_hidden(&window_for_main, true);
         // 阴影是窗口服务器侧表面：关掉，hide 后不留阴影晕。
         let _ = window_for_main.set_shadow(false);
         // transparent + 无原生材质 → orderOut 后桌面无残留（同浮球窗）。
@@ -124,6 +160,10 @@ pub fn summon_main(app: &tauri::AppHandle) -> tauri::Result<()> {
     // 不会闪一下「无阴影」的裸窗。
     let window_for_shadow = window.clone();
     let _ = app.run_on_main_thread(move || {
+        // D37：对称恢复上次 hide 时摘除的红绿灯按钮。与 set_shadow(true) 同处一个
+        // 主线程 Task，先于随后的 set_position/show 执行（proxy 队列 FIFO），
+        // 不会闪一下「无按钮」裸窗。
+        set_standard_window_buttons_hidden(&window_for_shadow, false);
         let _ = window_for_shadow.set_shadow(true);
     });
 
@@ -218,6 +258,87 @@ pub fn summon_main(app: &tauri::AppHandle) -> tauri::Result<()> {
     Ok(())
 }
 
+
+/// D37（2026-10-29）：Overlay 标题栏红绿灯按钮的摘除/恢复。
+///
+/// 根因：main 窗口 `decorations:true + titleBarStyle:"Overlay" + transparent:true`
+/// （tauri.conf.json）组合下，NSWindow orderOut（tauri hide()）后 WindowServer
+/// 不回收 standardWindowButtons 的合成表面——桌面上残留三个「幽灵红绿灯」。
+/// 2026-10-28 用户录屏 + 日志双重实证：hide 本身成功（is_visible=false）、
+/// 残留与鼠标位置/hover 无关（Esc + 鼠标远离同样残留），属 AppKit/WindowServer
+/// 系统层缺陷，非本应用代码 bug（同族：原生 vibrancy 残留浅灰矩形，见本文件
+/// 模块 doc 方案 A）。
+///
+/// 绕法：hide 前在窗口仍可见时把三颗按钮 `setHidden:YES`（强制主题框重绘，
+/// 按钮表面在窗口还在屏上时被正常移除），再 orderOut；show 前对称恢复
+/// `setHidden:NO`。零新增依赖——复用 floating_orb.rs 同款 libobjc runtime
+/// 原语（sel_registerName + objc_msgSend）；不引 objc2 feature（会连锁重编译
+/// tao，见记忆「work_area 地雷」）。
+///
+/// NSWindowButton：Close=0 / Miniaturize=1 / Zoom=2（zoom 可能被禁用返回 nil，
+/// 逐个判空）。调用方须保证在主线程调用（hide/show 收尾均在
+/// run_on_main_thread 闭包内）。
+#[cfg(target_os = "macos")]
+fn set_standard_window_buttons_hidden<R: Runtime>(
+    window: &tauri::WebviewWindow<R>,
+    hidden: bool,
+) {
+    let Ok(ns_window) = window.ns_window() else {
+        crate::logger::error(
+            "window",
+            "D37 standard buttons: ns_window handle unavailable, skip",
+        );
+        return;
+    };
+    let flag: usize = if hidden { 1 } else { 0 };
+    unsafe {
+        unsafe extern "C" {
+            fn sel_registerName(name: *const u8) -> *const std::os::raw::c_void;
+            fn objc_msgSend(
+                receiver: *mut std::os::raw::c_void,
+                selector: *const std::os::raw::c_void,
+                arg: usize,
+            );
+        }
+        let ns_window = ns_window as *mut std::os::raw::c_void;
+        // standardWindowButton: 需要返回值（NSButton*）。objc_msgSend 声明与
+        // floating_orb.rs 保持同签名（void 返回）避免跨模块 redeclared 警告，
+        // 按 floating_orb.rs getter 同款 transmute 手法取带返回值的函数指针。
+        let msg_send: unsafe extern "C" fn(
+            *mut std::os::raw::c_void,
+            *const std::os::raw::c_void,
+            usize,
+        ) = objc_msgSend;
+        let get_button: unsafe extern "C" fn(
+            *mut std::os::raw::c_void,
+            *const std::os::raw::c_void,
+            usize,
+        ) -> *mut std::os::raw::c_void = std::mem::transmute(msg_send as usize);
+        let sel_btn = sel_registerName(b"standardWindowButton:\0".as_ptr());
+        let sel_hide = sel_registerName(b"setHidden:\0".as_ptr());
+        // SAFETY: ns_window 是本进程有效 NSWindow 指针；standardWindowButton: 收
+        // NSUInteger 返回 NSButton*（可能 nil）；setHidden: 的 BOOL 按 0/1 传入
+        // （arm64 AAPCS64 寄存器低 8 位一致）。本函数仅在主线程被调用（AppKit
+        // 约束）。
+        for i in 0..3usize {
+            let button = get_button(ns_window, sel_btn, i);
+            if !button.is_null() {
+                objc_msgSend(button, sel_hide, flag);
+            }
+        }
+        crate::logger::info(
+            "window",
+            &format!("D37 standard buttons hidden={hidden}"),
+        );
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+fn set_standard_window_buttons_hidden<R: Runtime>(
+    _window: &tauri::WebviewWindow<R>,
+    _hidden: bool,
+) {
+}
 
 pub fn setup(app: &mut tauri::App) -> tauri::Result<()> {
     let window = app

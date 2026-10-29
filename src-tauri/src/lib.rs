@@ -52,6 +52,9 @@ pub fn run() {
             // 模块 1（1.4/1.8）：缩回终点——主窗 hide 收归 Rust 侧
             // （前端 hide 受 core:window:allow-hide ACL 拒绝，见 window.rs 注释）
             window::hide_main_window,
+            // D38（2026-10-29）：缩回动画起点（0ms）即刻摘红绿灯——280ms CSS
+            // 动画期间原生按钮不受 CSS 管，D37 在 280ms 末尾摘太晚且未合成
+            window::hide_traffic_lights,
             // 模块 1（浮球系统）：右键弧形菜单四命令 + 拖放文件读取
             floating_orb::toggle_orb_pin,
             // 模块 1（图钉可视化）：启动时同步置顶态，重启后视觉与真实状态一致

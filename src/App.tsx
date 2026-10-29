@@ -129,6 +129,16 @@ function App() {
     if (recallingRef.current) return;
     recallingRef.current = true;
     setRelaying("recall");
+    // D38（2026-10-29）：缩回动画起点（0ms）即刻摘红绿灯。280ms CSS 动画
+    // 会把 app-shell 缩没，但原生按钮不受 CSS 管——动画尾段（~130-280ms）
+    // 只剩红绿灯单独残留约 140ms（30fps 录屏逐帧实证）。在 0ms 摘钮，
+    // 整个缩回期间按钮已不可见。恢复按钮在 summon_main 的 show 前闭包（D37）。
+    try {
+      const { invoke } = await import("@tauri-apps/api/core");
+      await invoke("hide_traffic_lights");
+    } catch (e) {
+      void logError("window", `hide_traffic_lights failed: ${String(e)}`);
+    }
     const { emit } = await import("@tauri-apps/api/event");
     window.setTimeout(async () => {
       try {
