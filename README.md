@@ -6,10 +6,13 @@
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License: MIT" /></a>
   <a href="https://github.com/agentscope-ai/QwenPaw"><img src="https://img.shields.io/badge/Powered%20by-QwenPaw-5319E7" alt="QwenPaw" /></a>
   <img src="https://img.shields.io/badge/platform-macOS%2015%2B-000000?logo=apple&logoColor=white" alt="macOS" />
-  <img src="https://img.shields.io/badge/status-pre--release-orange" alt="Pre-release" />
+  <a href="https://github.com/yylxdzz/Paw-Pad/releases/latest"><img src="https://img.shields.io/badge/release-v1.0.0-brightgreen" alt="Release: v1.0.0" /></a>
+  <img src="https://img.shields.io/github/downloads/yylxdzz/Paw-Pad/total?label=downloads" alt="Downloads" />
 </p>
 
 <p align="center"><img src="assets/hero-summon.gif" width="560" alt="全局快捷键呼出 Paw Pad" /></p>
+
+<p align="center"><a href="https://github.com/yylxdzz/Paw-Pad/releases/latest"><b>⬇️ 下载 DMG（v1.0.0 · 6.4 MB）</b></a> — 未签名应用，首次打开请<b>右键 →「打开」</b>（详见下方「关于签名」）</p>
 
 ---
 
