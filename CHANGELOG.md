@@ -12,11 +12,9 @@
 
 ### 🪟 桌面浮球
 
-<p align="center">
-  <img src="https://raw.githubusercontent.com/yylxdzz/Paw-Pad/master/assets/orb-states.gif" width="180" alt="浮球七态" />
-  &nbsp;
-  <img src="https://raw.githubusercontent.com/yylxdzz/Paw-Pad/master/assets/arc-menu.gif" width="380" alt="弧形菜单" />
-</p>
+<p align="center"><img src="https://raw.githubusercontent.com/yylxdzz/Paw-Pad/master/assets/orb-states.gif" width="400" alt="浮球七态" /></p>
+
+<p align="center"><img src="https://raw.githubusercontent.com/yylxdzz/Paw-Pad/master/assets/arc-menu.gif" width="400" alt="弧形菜单" /></p>
 
 - 50px 常驻浮球，始终置顶；拖动 + 角落吸附 + 位置记忆
 - 单击呼出主窗口（Dock 式三段接力动画）；右键弧形菜单：置顶 / 新建 / 隐藏 / 退出

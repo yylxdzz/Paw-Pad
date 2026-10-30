@@ -37,11 +37,9 @@ Paw Pad 想解决的就是这一下：
 
 桌面常驻的 50px 圆形浮球，始终置顶。
 
-<p align="center">
-  <img src="assets/orb-states.gif" width="180" alt="浮球七态循环" />
-  &nbsp;&nbsp;
-  <img src="assets/arc-menu.gif" width="380" alt="弧形菜单" />
-</p>
+<p align="center"><img src="assets/orb-states.gif" width="400" alt="浮球七态循环" /></p>
+
+<p align="center"><img src="assets/arc-menu.gif" width="400" alt="弧形菜单" /></p>
 
 - **单击呼出**主窗口（Dock 式三段接力动画）
 - **右键弧形菜单**：置顶 / 新建 / 隐藏 / 退出
