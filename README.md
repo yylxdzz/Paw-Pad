@@ -132,7 +132,7 @@ App WebView 前端（React + TS）
 - **CSS `backdrop-filter`** 毛玻璃——原生侧只保留 transparent 窗口 + 阴影开关，不用 NSVisualEffectView / Liquid Glass（避免窗口关闭后桌面残留原生材质表面）
 - **libobjc runtime** 原语（浮球置顶 / 红绿灯按钮操作等原生交互，零新增依赖）
 
-> 目前仅 macOS。Windows 计划通过 GitHub Actions CI 交叉构建，暂未支持。
+> 目前仅 macOS（Apple Silicon）。Windows 计划通过 GitHub Actions CI 交叉构建，暂未支持。
 
 ---
 
@@ -141,7 +141,7 @@ App WebView 前端（React + TS）
 ### 前置依赖
 
 - **[QwenPaw](https://github.com/agentscope-ai/QwenPaw)** 后端运行在 `localhost:8088`（Paw Pad 没有后端，必须先有 QwenPaw）
-- macOS 15+
+- macOS 15+ / Apple Silicon（M 系列芯片；Intel Mac 暂不支持）
 - Node.js + [pnpm](https://pnpm.io)
 - Rust toolchain（`rustup`）
 
@@ -159,7 +159,7 @@ pnpm install
 pnpm tauri build      # 产出 dmg
 ```
 
-> **关于签名**：现阶段 dmg 不做代码签名——首次打开时 macOS 会拦，到「系统设置 → 隐私与安全性」里手动信任一次即可。签名留到后面。
+> **关于签名**：当前版本 **未做代码签名 / 公证**——首次打开时 macOS 可能提示「无法验证开发者」，这是未签名应用的正常现象，不是安装包有问题。打开方式二选一：**① 推荐——在访达中右键点击 Paw Pad →「打开」→ 弹窗里再点一次「打开」**；② 或前往「系统设置 → 隐私与安全性」，在底部点「仍要打开」。签名 + 公证需要 Apple Developer Program（$99/年），等项目站稳再说。
 
 ---
 
